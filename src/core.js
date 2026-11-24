@@ -18,7 +18,10 @@
   /* Abstand Punkt–Strecke und Parameter t */
   const segProj = (p, a, b) => { const d = sub(b, a), L2 = dot(d, d) || 1, t = dot(sub(p, a), d) / L2, c = [a[0] + d[0] * t, a[1] + d[1] * t]; return { t, d: len(sub(p, c)) }; };
 
-  /* ---------- Wandgraph aufbauen: fangen, teilen, doppelte zusammenführen ---------- */
+  /* ---------- Wandgraph aufbauen: fangen, teilen, doppelte zusammenführen ----------
+     Eine Wand ist eine Achse a→b mit Dicke t. ts ist der Teil der Dicke auf der S-Seite der Achse,
+     S = [-d.y, d.x] für d = b - a (im Bildschirm rechts der Laufrichtung). ts = t/2: Achse in Wandmitte;
+     ts = 0 oder t: Achse auf einer Wandfläche (so liegen Außenwände mit der Achse auf der Rauminnenseite). */
   function buildGraph(segs, tol = TOL) {
     // 1. Endpunkte fangen
     const pts = [];
@@ -48,12 +51,13 @@
         const n1 = on[k].n, n2 = on[k + 1].n; if (n1 === n2) continue;
         const key = n1.id < n2.id ? n1.id + '|' + n2.id : n2.id + '|' + n1.id;
         const old = edges.get(key);
-        if (!old) edges.set(key, { a: n1.id, b: n2.id, t: s.t, ext: !!s.ext, src: [s.src] });
-        else { old.t = Math.max(old.t, s.t); old.ext = old.ext && !!s.ext; old.src.push(s.src); }
+        const ts = s.ts == null ? s.t / 2 : s.ts;
+        if (!old) edges.set(key, { a: n1.id, b: n2.id, t: s.t, ts, ext: !!s.ext, src: [s.src] });
+        else { if (s.t > old.t + 1) { old.t = s.t; old.ts = old.a === n1.id ? ts : s.t - ts; } old.ext = old.ext && !!s.ext; old.src.push(s.src); }
       }
     }
     const used = new Set(); for (const e of edges.values()) { used.add(e.a); used.add(e.b); }
-    const walls = [...edges.values()].map((e, i) => ({ id: 'w' + (i + 1), a: e.a, b: e.b, t: Math.round(e.t), ext: e.ext, src: e.src }));
+    const walls = [...edges.values()].map((e, i) => ({ id: 'w' + (i + 1), a: e.a, b: e.b, t: Math.round(e.t), ts: Math.round(e.ts * 2) / 2, ext: e.ext, src: e.src }));
     return { knoten: nodes.filter(n => used.has(n.id)), waende: walls, oeffnungen: [] };
   }
 
@@ -85,7 +89,7 @@
     const N = new Map(g.knoten.map(n => [n.id, n]));
     const L = face.halbkanten.map(h => { const a = [N.get(h.u).x, N.get(h.u).y], b = [N.get(h.v).x, N.get(h.v).y], d = sub(b, a), l = len(d) || 1, dir = [d[0] / l, d[1] / l];
       // Innenseite: bei positiver Fläche (y unten) liegt der Raum rechts der Halbkante im Bildschirm
-      const nIn = [-dir[1], dir[0]], o = h.w.t / 2; return { p: [a[0] + nIn[0] * o, a[1] + nIn[1] * o], d: dir, a, b, nIn, o }; });
+      const nIn = [-dir[1], dir[0]], ts = h.w.ts == null ? h.w.t / 2 : h.w.ts, o = h.u === h.w.a ? ts : h.w.t - ts; return { p: [a[0] + nIn[0] * o, a[1] + nIn[1] * o], d: dir, a, b, nIn, o }; });
     const q = [];
     for (let i = 0; i < L.length; i++) {
       const A = L[(i - 1 + L.length) % L.length], B = L[i];
@@ -113,34 +117,43 @@
     // nach außen zeigende Normale je Segment
     const outN = (o, i) => { const a = o.q[i], b = o.q[i + 1], d = sub(b, a), l = len(d) || 1; const n = o.sa > 0 ? [d[1] / l, -d[0] / l] : [-d[1] / l, d[0] / l]; return { n, dir: [d[0] / l, d[1] / l], L: l, a }; };
     // gegenüberliegende Nachbarwände (wie wallHits im Bestandsaufnahme-Tool)
-    const hits = (o, i) => { const S = outN(o, i), res = []; for (const u of R) { if (u === o) continue; u.r.segs.forEach((x, xi) => { const T = outN(u, xi); if (dot(T.n, S.n) > -0.9) return; const d0 = dot(sub(T.a, S.a), S.n); if (d0 < -0.005 || d0 > 0.8) return; const b0 = dot(sub(u.q[xi], S.a), S.dir), b1 = dot(sub(u.q[xi + 1], S.a), S.dir), von = Math.max(0, Math.min(b0, b1)), bis = Math.min(S.L, Math.max(b0, b1)); if (bis - von > 0.05) res.push({ von, bis, d: Math.max(0, d0), nb: u.r.id }); }); } return res.sort((a, b) => a.von - b.von); };
+    const hits = (o, i) => { const S = outN(o, i), res = []; for (const u of R) { if (u === o) continue; u.r.segs.forEach((x, xi) => { const T = outN(u, xi); if (dot(T.n, S.n) > -0.9) return; const d0 = dot(sub(T.a, S.a), S.n); if (d0 < -0.005 || d0 > 0.8) return; const b0 = dot(sub(u.q[xi], S.a), S.dir), b1 = dot(sub(u.q[xi + 1], S.a), S.dir), von = Math.max(0, Math.min(b0, b1)), bis = Math.min(S.L, Math.max(b0, b1)); if (bis - von > 0.05) res.push({ von, bis, d: Math.max(0, d0), nb: u.r.id, xi }); }); } return res.sort((a, b) => a.von - b.von); };
     const segs = [], openings = [], roomRefs = [];
+    // 1. Durchgang: Abschnitte je Raumseite (ohne gegenüberliegenden Raum = Außenwand, wie wallParts im Bestandsaufnahme-Tool)
+    const PARTS = new Map();
+    for (const o of R) o.r.segs.forEach((s, i) => {
+      const S = outN(o, i), H = hits(o, i), parts = []; let c = 0;
+      const own = H.length || ext(s) ? { t: extTh(s), ext: true } : { t: s.dicke > 0 ? s.dicke / 100 : iwDef(), ext: false };
+      for (const h of H) { if (h.von - c > 0.05) parts.push({ von: c, bis: h.von, ...own }); if (h.bis > c + 0.01) { parts.push({ von: Math.max(c, h.von), bis: h.bis, t: h.d, ext: false, nb: h.nb, xi: h.xi }); c = h.bis; } }
+      if (S.L - c > 0.05) parts.push({ von: c, bis: S.L, ...own });
+      else if (parts.length) parts[parts.length - 1].bis = S.L;
+      PARTS.set(o.r.id + ':' + i, parts);
+    });
+    // Achslage: Außenwand mit der Achse auf der Raumseite; Innenwand auf der Fläche des Raums, dessen Seite weiterläuft
+    // (mehr Abschnitte), sonst des Raums mit der kleineren Kennung. So bleibt jede durchgehende Raumseite eine gerade Achse.
+    const axOf = (o, i, pt) => { if (!pt.nb) return 0; const mine = PARTS.get(o.r.id + ':' + i).length, theirs = (PARTS.get(pt.nb + ':' + pt.xi) || []).length; return mine > theirs || (mine === theirs && String(o.r.id) < String(pt.nb)) ? 0 : pt.t; };
+    // 2. Durchgang: Achsstücke
     for (const o of R) {
       const pieces = [];
       o.r.segs.forEach((s, i) => {
-        const S = outN(o, i), H = hits(o, i), parts = []; let c = 0;
-        // Abschnitte ohne gegenüberliegenden Raum sind Außenwand (wie wallParts im Bestandsaufnahme-Tool)
-        const own = H.length || ext(s) ? { t: extTh(s), ext: true } : { t: s.dicke > 0 ? s.dicke / 100 : iwDef(), ext: false };
-        for (const h of H) { if (h.von - c > 0.05) parts.push({ von: c, bis: h.von, ...own }); if (h.bis > c + 0.01) { parts.push({ von: Math.max(c, h.von), bis: h.bis, t: h.d, ext: false, nb: h.nb }); c = h.bis; } }
-        if (S.L - c > 0.05) parts.push({ von: c, bis: S.L, ...own });
-        else if (parts.length) parts[parts.length - 1].bis = S.L;
-        for (const pt of parts) { if (pt.t <= 0.001) continue; const o2 = pt.t / 2, a = [S.a[0] + S.dir[0] * pt.von + S.n[0] * o2, S.a[1] + S.dir[1] * pt.von + S.n[1] * o2], b = [S.a[0] + S.dir[0] * pt.bis + S.n[0] * o2, S.a[1] + S.dir[1] * pt.bis + S.n[1] * o2]; pieces.push({ a, b, d: S.dir, t: pt.t, ext: pt.ext, src: o.r.id + ':' + i }); }
+        const S = outN(o, i), parts = PARTS.get(o.r.id + ':' + i), sv = [-S.dir[1], S.dir[0]], roomOnS = dot(sv, S.n) < 0;
+        for (const pt of parts) { if (pt.t <= 0.001) continue; const ax = axOf(o, i, pt); pt.ax = ax; const a = [S.a[0] + S.dir[0] * pt.von + S.n[0] * ax, S.a[1] + S.dir[1] * pt.von + S.n[1] * ax], b = [S.a[0] + S.dir[0] * pt.bis + S.n[0] * ax, S.a[1] + S.dir[1] * pt.bis + S.n[1] * ax]; pieces.push({ a, b, d: S.dir, t: pt.t, ts: roomOnS ? ax : pt.t - ax, ax, ext: pt.ext, src: o.r.id + ':' + i }); }
         // Öffnungen: Lage auf der Raumseite → Punkt auf der Wandachse
         const list = []; for (const op of s.oeffnungen || []) { const k = Math.max(1, Math.round(op.anz || 1)); for (let j = 0; j < k; j++) list.push(op); }
         // automatisch platzierte Öffnungen: in den längsten passenden Abschnitt (Innentür → Abschnitt mit Nachbar, sonst Außenabschnitt)
         const grp = new Map(), pos = list.map((op, j) => { let bw = op.b || 0.9; if (S.L > 0.3) bw = Math.min(bw, S.L - 0.1); return { op, bw, cc: (op.abst != null && (op.anz || 1) <= 1) ? op.abst + bw / 2 : S.L * (j + 1) / (list.length + 1) }; });
         if (parts.length > 1) for (const x of pos) { if (x.op.abst != null && (x.op.anz || 1) <= 1) continue; const inn = x.op.typ === 'innentuer', cand = parts.filter(q => inn ? q.nb : !q.nb); if (!cand.length) continue; const q = cand.reduce((u, v) => v.bis - v.von > u.bis - u.von ? v : u); if (!grp.has(q)) grp.set(q, []); grp.get(q).push(x); }
         for (const [q, xs] of grp) xs.forEach((x, k) => { x.bw = Math.min(x.bw, q.bis - q.von - 0.1); x.cc = q.von + (q.bis - q.von) * (k + 1) / (xs.length + 1); });
-        pos.forEach(({ op, bw, cc }) => { if (!(bw > 0.2)) return; const part = parts.find(q => cc >= q.von - 1e-6 && cc <= q.bis + 1e-6) || { t: extTh(s) }; const m = [S.a[0] + S.dir[0] * cc + S.n[0] * part.t / 2, S.a[1] + S.dir[1] * cc + S.n[1] * part.t / 2]; openings.push({ m: [m[0] * 1000, m[1] * 1000], typ: op.typ, breite: Math.round(bw * 1000), brh: Math.round((op.bruest || 0) * 1000), hoehe: Math.round((op.h || 1) * 1000), quelle: op.id }); });
+        pos.forEach(({ op, bw, cc }) => { if (!(bw > 0.2)) return; const part = parts.find(q => cc >= q.von - 1e-6 && cc <= q.bis + 1e-6) || { ax: 0, t: extTh(s) }; const ax = part.ax || 0, m = [S.a[0] + S.dir[0] * cc + S.n[0] * ax, S.a[1] + S.dir[1] * cc + S.n[1] * ax]; openings.push({ m: [m[0] * 1000, m[1] * 1000], typ: op.typ, breite: Math.round(bw * 1000), brh: Math.round((op.bruest || 0) * 1000), hoehe: Math.round((op.h || 1) * 1000), quelle: op.id }); });
       });
       // Stücke zu einer geschlossenen Achsenkontur verbinden
       const n = pieces.length;
       for (let k = 0; k < n; k++) {
         const A = pieces[k], B = pieces[(k + 1) % n];
         if (Math.abs(cross(A.d, B.d)) > 1e-3) { const x = lineX(A.a, A.d, B.a, B.d); if (x) { A.b = x; B.a = x; } }
-        else if (len(sub(A.b, B.a)) > 0.005) segs.push({ a: A.b.map(v => v * 1000), b: B.a.map(v => v * 1000), t: Math.max(A.t, B.t) * 1000, ext: A.ext && B.ext, src: 'stoss' });
+        else if (len(sub(A.b, B.a)) > 0.005) segs.push({ a: A.b.map(v => v * 1000), b: B.a.map(v => v * 1000), t: Math.max(A.t, B.t) * 1000, ts: Math.max(A.t, B.t) * 500, ext: A.ext && B.ext, src: 'stoss' });
       }
-      pieces.forEach(pc => segs.push({ a: pc.a.map(v => v * 1000), b: pc.b.map(v => v * 1000), t: pc.t * 1000, ext: pc.ext, src: pc.src }));
+      pieces.forEach(pc => segs.push({ a: pc.a.map(v => v * 1000), b: pc.b.map(v => v * 1000), t: pc.t * 1000, ts: pc.ts * 1000, ext: pc.ext, src: pc.src }));
       const qi = o.q.slice(0, -1); roomRefs.push({ id: o.r.id, name: o.r.name, nutzung: o.r.nutzung, beheizt: o.r.beheizt, temp: o.r.temp, mitte: centroid(qi).map(v => v * 1000), flaeche_m2: Math.abs(o.sa) });
     }
     const g = buildGraph(segs);
@@ -160,6 +173,59 @@
     return { graph: g, raeume: rs, restflaechen: rest, quellraeume: roomRefs };
   }
 
-  const api = { buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+
+  /* ---------- Bearbeiten: jede Änderung baut den Graphen neu auf (fangen, teilen, zusammenführen) ---------- */
+  const clone = g => JSON.parse(JSON.stringify(g));
+  const nodeMap = g => new Map(g.knoten.map(n => [n.id, n]));
+  const wallEnds = (g, w, N = nodeMap(g)) => { const a = N.get(w.a), b = N.get(w.b); return [[a.x, a.y], [b.x, b.y]]; };
+  function toSegs(g) { const N = nodeMap(g); return g.waende.map(w => { const [a, b] = wallEnds(g, w, N); return { a, b, t: w.t, ts: w.ts == null ? w.t / 2 : w.ts, ext: !!w.ext, src: w.id }; }); }
+  // Öffnungen als absolute Punkte (Mitte auf der Achse) sichern und nach dem Neuaufbau wieder an Wände hängen
+  function openingPoints(g) { const N = nodeMap(g); return (g.oeffnungen || []).map(o => { const w = g.waende.find(x => x.id === o.wand); if (!w) return null; const [a, b] = wallEnds(g, w, N), d = sub(b, a), L = len(d) || 1, c = o.abstand + o.breite / 2; return { o, m: [a[0] + d[0] / L * c, a[1] + d[1] / L * c], dir: [d[0] / L, d[1] / L] }; }).filter(Boolean); }
+  function attachOpenings(g, pts) {
+    const N = nodeMap(g); g.oeffnungen = [];
+    for (const { o, m, dir } of pts) {
+      let best = null; for (const w of g.waende) { const [a, b] = wallEnds(g, w, N), pr = segProj(m, a, b), d = sub(b, a), L = len(d) || 1; if (pr.t >= 0 && pr.t <= 1 && Math.abs(dot([d[0] / L, d[1] / L], dir)) > 0.95 && (!best || pr.d < best.d)) best = { w, d: pr.d, t: pr.t, L }; }
+      if (!best || best.d > 200) continue;
+      const breite = Math.min(o.breite, best.L - 20); if (breite < 200) continue;
+      g.oeffnungen.push({ ...o, wand: best.w.id, breite, abstand: Math.round(Math.max(10, Math.min(best.L - breite - 10, best.t * best.L - breite / 2))) });
+    }
+    return g;
+  }
+  function rebuild(g, segs, pts) { const g2 = buildGraph(segs.map(s => ({ ...s }))); g2.waende.forEach(w => delete w.src); return attachOpenings(g2, pts || openingPoints(g)); }
+  const edit = {
+    addWall: (g, a, b, props) => rebuild(g, [...toSegs(g), { a, b, t: props.t, ts: props.ts == null ? props.t / 2 : props.ts, ext: !!props.ext }]),
+    deleteWall: (g, id) => rebuild(g, toSegs(g).filter(s => s.src !== id), openingPoints({ ...g, oeffnungen: (g.oeffnungen || []).filter(o => o.wand !== id) })),
+    moveNode: (g, id, x, y) => { const h = clone(g), pts = openingPoints(g), n = h.knoten.find(k => k.id === id); if (!n) return g; n.x = Math.round(x); n.y = Math.round(y); return rebuild(h, toSegs(h), pts); },
+    setWall: (g, id, patch) => { const h = clone(g), w = h.waende.find(x => x.id === id); if (!w) return g; const t0 = w.t, side = (w.ts == null ? t0 / 2 : w.ts) / (t0 || 1); Object.assign(w, patch); if (patch.t != null && patch.ts == null) w.ts = Math.round(patch.t * side * 2) / 2; return h; },
+    flipWall: (g, id) => { const h = clone(g), w = h.waende.find(x => x.id === id); if (w) w.ts = w.t - (w.ts == null ? w.t / 2 : w.ts); return h; },
+    addOpening: (g, wallId, center, props) => { const h = clone(g), w = h.waende.find(x => x.id === wallId); if (!w) return g; const [a, b] = wallEnds(h, w), L = len(sub(b, a)), breite = Math.min(props.breite, L - 20); if (breite < 200) return g; const id = 'o' + (1 + Math.max(0, ...h.oeffnungen.map(o => +String(o.id).slice(1) || 0))); h.oeffnungen.push({ id, wand: wallId, typ: props.typ, breite, hoehe: props.hoehe, brh: props.brh, abstand: Math.round(Math.max(10, Math.min(L - breite - 10, center - breite / 2))) }); return h; },
+    setOpening: (g, id, patch) => { const h = clone(g), o = h.oeffnungen.find(x => x.id === id); if (o) Object.assign(o, patch); return h; },
+    deleteOpening: (g, id) => { const h = clone(g); h.oeffnungen = h.oeffnungen.filter(o => o.id !== id); return h; }
+  };
+  // Räume mit Namen: neue Flächen erben Name und Nutzung des alten Raums, dessen Mittelpunkt in ihnen liegt
+  function roomsWithMeta(g, meta) {
+    const used = new Set(), names = new Set((meta || []).map(x => x.name)); let k = 0;
+    const fresh = () => { do k++; while (names.has('Raum ' + k)); names.add('Raum ' + k); return 'Raum ' + k; };
+    return rooms(g).map(r => { const m = (meta || []).find(x => !used.has(x) && x.mitte && inPoly(x.mitte, r.achse)); if (m) used.add(m); const c = centroid(r.kontur); return { ...r, name: m ? m.name : fresh(), nutzung: m ? m.nutzung || '' : '', temp: m ? m.temp : null, beheizt: m ? m.beheizt : null, bestandsaufnahmeId: m ? m.bestandsaufnahmeId || null : null, mitte: [Math.round(c[0]), Math.round(c[1])] }; });
+  }
+
+
+  /* Wandstöße: an jedem Knoten die Fläche zwischen den Wandkanten schließen (konvexe Hülle der Kantenschnitte) */
+  function hull(P) { const q = P.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
+    for (const p of q) { while (lo.length > 1 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+    for (const p of q.reverse()) { while (up.length > 1 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+    return lo.slice(0, -1).concat(up.slice(0, -1)); }
+  function nodeCaps(g) {
+    const N = nodeMap(g), at = new Map(); g.waende.forEach(w => { for (const id of [w.a, w.b]) { if (!at.has(id)) at.set(id, []); at.get(id).push(w); } });
+    const caps = [];
+    for (const [id, ws] of at) { if (ws.length < 2) continue; const n = N.get(id), c = [n.x, n.y], lines = [], pts = [], tmax = Math.max(...ws.map(w => w.t));
+      for (const w of ws) { const o = N.get(w.a === id ? w.b : w.a), d = sub([o.x, o.y], c), L = len(d) || 1, u = [d[0] / L, d[1] / L], S0 = [-u[1], u[0]], ts0 = w.ts == null ? w.t / 2 : w.ts, ts = w.a === id ? ts0 : w.t - ts0; // Seite relativ zur Richtung vom Knoten weg
+        const A = [c[0] + S0[0] * ts, c[1] + S0[1] * ts], B = [c[0] - S0[0] * (w.t - ts), c[1] - S0[1] * (w.t - ts)]; pts.push(A, B); lines.push({ p: A, d: u, w }, { p: B, d: u, w }); }
+      for (let i = 0; i < lines.length; i++) for (let j = i + 1; j < lines.length; j++) { if (lines[i].w === lines[j].w) continue; const x = lineX(lines[i].p, lines[i].d, lines[j].p, lines[j].d); if (x && len(sub(x, c)) <= tmax * 1.5) pts.push(x); }
+      const h = hull(pts); if (h.length >= 3) caps.push({ knoten: id, poly: h.map(p => [Math.round(p[0]), Math.round(p[1])]), ext: ws.some(w => w.ext) }); }
+    return caps;
+  }
+
+  const api = { nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

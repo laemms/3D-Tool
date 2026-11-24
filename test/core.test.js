@@ -37,4 +37,45 @@ for (const f of p.geschosse) t('Beispiel-EFH 1978, ' + f.name + ': Rundlauf Räu
     assert.ok(Math.abs(m.flaeche_m2 - q.flaeche_m2) < 0.05, q.name + ': ' + m.flaeche_m2 + ' statt ' + q.flaeche_m2);
   }
 });
+
+t('Ausrichtung: Achse auf der Innenseite ergibt dieselbe Innenfläche', () => {
+  // Achsen auf den Innenflächen eines 4,00 × 3,00 m Raums, Wände 0,36 m nach außen (ts auf der Außenseite)
+  const s = (a, b) => ({ a, b, t: 360, ts: 0 });
+  const g = GM.buildGraph([s([0, 0], [4000, 0]), s([4000, 0], [4000, 3000]), s([4000, 3000], [0, 3000]), s([0, 3000], [0, 0])]);
+  const r = GM.rooms(g);
+  assert.strictEqual(r.length, 1); assert.ok(Math.abs(r[0].flaeche_m2 - 12) < 1e-6, r[0].flaeche_m2);
+});
+
+t('Beispiel-EFH 1978, EG: keine Versatzstücke unter 150 mm', () => {
+  const res = GM.fromBestandsaufnahme(p, p.geschosse[1]), N = new Map(res.graph.knoten.map(n => [n.id, n]));
+  const kurz = res.graph.waende.map(w => Math.hypot(N.get(w.b).x - N.get(w.a).x, N.get(w.b).y - N.get(w.a).y)).filter(l => l < 150);
+  console.log('    Wände ' + res.graph.waende.length + ', kurze ' + kurz.length + ' (' + kurz.map(Math.round).join(', ') + ' mm), Restflächen ' + res.restflaechen.length);
+  assert.ok(kurz.length === 0, 'kurze Wände: ' + kurz.length);
+});
 console.log(ok + ' Tests bestanden');
+
+// ---- Bearbeiten ----
+{
+  let g = GM.buildGraph([]); g.oeffnungen = [];
+  const A = { t: 365, ts: 0, ext: true };
+  g = GM.edit.addWall(g, [0, 0], [8000, 0], A); g = GM.edit.addWall(g, [8000, 0], [8000, 6000], A); g = GM.edit.addWall(g, [8000, 6000], [0, 6000], A); g = GM.edit.addWall(g, [0, 6000], [10, 15], A);
+  t('Editor: geschlossene Kontur aus 4 gezeichneten Wänden ist ein Raum', () => { const r = GM.rooms(g); assert.strictEqual(g.knoten.length, 4); assert.strictEqual(r.length, 1); });
+  const w0 = g.waende.find(w => Math.abs(g.knoten.find(n => n.id === w.a).y) < 100 && Math.abs(g.knoten.find(n => n.id === w.b).y) < 100);
+  g = GM.edit.addOpening(g, w0.id, 4000, { typ: 'fenster', breite: 1200, hoehe: 1400, brh: 900 });
+  g = GM.edit.addWall(g, [3000, 0], [3000, 6000], { t: 115 });
+  t('Editor: Innenwand teilt den Raum, Fenster bleibt an seiner Stelle', () => {
+    assert.strictEqual(GM.rooms(g).length, 2); assert.strictEqual(g.oeffnungen.length, 1);
+    const p0 = GM.openingPoints(g)[0].m; assert.ok(Math.abs(p0[0] - 4000) < 10 && Math.abs(p0[1]) < 10, JSON.stringify(p0));
+  });
+  t('Editor: Knoten verschieben und Wand löschen', () => {
+    const n = g.knoten.find(k => Math.abs(k.x - 3000) < 10 && Math.abs(k.y - 6000) < 10); const g2 = GM.edit.moveNode(g, n.id, 3500, 6000);
+    assert.strictEqual(GM.rooms(g2).length, 2);
+    const iw = g2.waende.find(w => w.t === 115); const g3 = GM.edit.deleteWall(g2, iw.id);
+    assert.strictEqual(GM.rooms(g3).length, 1); assert.strictEqual(g3.oeffnungen.length, 1);
+  });
+  t('Editor: Raumnamen bleiben nach Änderungen erhalten', () => {
+    const r1 = GM.roomsWithMeta(g, []); r1[0].name = 'Wohnen'; const g2 = GM.edit.addOpening(g, g.waende[0].id, 500, { typ: 'innentuer', breite: 885, hoehe: 2010, brh: 0 });
+    const r2 = GM.roomsWithMeta(g2, r1); assert.ok(r2.some(r => r.name === 'Wohnen'));
+  });
+}
+console.log('Bearbeiten geprüft');
