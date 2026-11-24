@@ -36,6 +36,14 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Jede Änderung: `node test/core.test.js`, `node test/ifc.test.js`, `node build.js`, `python3 test/page_test.py`.
 - Wände: Achse a→b, Dicke `t` (mm), `ts` = Dickenanteil auf der S-Seite (rechts der Laufrichtung im Bildschirm).
 
+## Betrieb
+
+- **Lokal (Standard bei Chris):** `gebaeudemodell.html` liegt neben `index.html` des Bestandsaufnahme-Tools im Ordner
+  `Desktop\Claude Cowork\Energieberatung\Tool Bestandsaufnahme\Bestandsaufnahme Energieberatung` und wird im Browser
+  geöffnet. Die Seite liest die Projekte aus dem Browser-Speicher des Tools (`localStorage` `ba.v1`), speichert das Modell
+  unter `ba.v1.modell` und schreibt die IFC in den Übergabeordner, den das Tool gewählt hat (IndexedDB `ba-fotos`, Schlüssel `scdir`).
+- **Artefakt:** mit gemeinsamer Datenbank (`projekte`, eigenes `modell`).
+
 ## Veröffentlichen
 
 `dist/gebaeudemodell.html` per `publish_files` (mode `patch`) in das Artefakt

@@ -123,8 +123,11 @@ const st = { db: null, projects: {}, models: {}, pid: null, fid: null, floors: [
 function setSync(t, cls) { const e = $('sync'); e.textContent = t; e.className = 'sync ' + (cls || ''); }
 async function init() {
   let db = null; try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
-  st.db = db; if (!db) { setSync('Keine Datenbank – nichts wird gespeichert', 'warn'); return; }
-  try {
+  st.db = db;
+  if (!db) { // lokale Datei: dieselben Browser-Daten wie das Bestandsaufnahme-Tool (Schlüssel ba.v1)
+    st.local = true; loadLocal(); setSync('Lokal: Daten aus der Bestandsaufnahme auf diesem Gerät', 'ok');
+    window.addEventListener('storage', e => { if (e.key === LS) { const cur = st.pid; loadLocal(true); if (st.projects[cur]) st.pid = cur; } });
+  } else try {
     const tm = new Promise((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), 10000));
     const [sp, sm] = await Promise.race([Promise.all([db.collection('projekte').get(), db.collection('modell').get()]), tm]);
     sp.docs.forEach(d => { const x = d.data(); if (x && x.id && Array.isArray(x.geschosse)) st.projects[x.id] = x; });
@@ -132,9 +135,21 @@ async function init() {
     try { const fs = await db.doc('einstellungen/firma').get(); if (fs.exists) st.firma = (fs.data() || {}).firma || {}; } catch (e) { /* ohne Einstellungen weiter */ }
     setSync('Verbunden', 'ok');
   } catch (e) { setSync('Datenbank nicht erreichbar: ' + e.message, 'warn'); }
-  const ids = Object.keys(st.projects).sort((a, b) => (a === 'beispiel' ? -1 : b === 'beispiel' ? 1 : (st.projects[b].geaendert || 0) - (st.projects[a].geaendert || 0)));
+  fillProjects();
+}
+const LS = 'ba.v1', LSM = 'ba.v1.modell';
+function loadLocal(keep) {
+  try { const all = JSON.parse(localStorage.getItem(LS) || '{}') || {}; st.projects = {}; Object.values(all).forEach(x => { if (x && x.id && Array.isArray(x.geschosse)) st.projects[x.id] = x; }); } catch (e) { st.projects = {}; }
+  try { st.models = JSON.parse(localStorage.getItem(LSM) || '{}') || {}; } catch (e) { st.models = {}; }
+  try { st.firma = (JSON.parse(localStorage.getItem(LS + '.set') || '{}') || {}).firma || {}; } catch (e) { st.firma = {}; }
+  if (keep) fillProjects(true);
+}
+function fillProjects(keep) {
+  const ids = Object.keys(st.projects).sort((a, b) => (a === 'beispiel' ? 1 : b === 'beispiel' ? -1 : (st.projects[b].geaendert || 0) - (st.projects[a].geaendert || 0)));
   $('proj').innerHTML = ids.map(id => `<option value="${esc(id)}">${esc(st.projects[id].name || id)}</option>`).join('');
-  if (ids.length) selectProject(ids[0]);
+  if (!ids.length) { $('rooms').innerHTML = '<p class="small">Keine Projekte gefunden. Öffne zuerst das Bestandsaufnahme-Tool aus demselben Ordner und lege dort ein Projekt an.</p>'; return; }
+  if (keep && st.pid && st.projects[st.pid]) { $('proj').value = st.pid; return; }
+  selectProject(ids[0]);
 }
 function fromBA(p) {
   return p.geschosse.map(f => { const r = GM.fromBestandsaufnahme(p, f), g = r.graph; g.waende.forEach(w => delete w.src); g.oeffnungen.forEach(o => delete o.quelle);
@@ -142,9 +157,9 @@ function fromBA(p) {
     return { id: f.id, name: f.name || 'Geschoss', h: Math.round((f.geschossHoehe || 2.8) * 1000), g, meta }; });
 }
 function selectProject(pid) {
-  st.pid = pid; const p = st.projects[pid], m = st.models[pid];
+  st.pid = pid; $('proj').value = pid; const p = st.projects[pid], m = st.models[pid];
   if (m && m.version >= MODEL_VERSION) st.floors = p.geschosse.map(f => { const x = (m.geschosse || []).find(y => y.id === f.id) || { knoten: [], waende: [], oeffnungen: [], raeume: [] }; return { id: f.id, name: f.name || 'Geschoss', h: x.geschossHoehe_mm || Math.round((f.geschossHoehe || 2.8) * 1000), g: { knoten: x.knoten || [], waende: x.waende || [], oeffnungen: x.oeffnungen || [] }, meta: x.raeume || [] }; });
-  else { st.floors = fromBA(p); st.dirty = !!st.db; }
+  else { st.floors = fromBA(p); st.dirty = !!st.db || !!st.local; }
   const fs = st.floors.filter(f => f.g.waende.length);
   st.fid = (fs.find(f => /^(eg|erd)/i.test(f.name)) || fs[0] || st.floors[0] || {}).id;
   st.undo = []; st.redo = []; st.sel = null; st.chain = null; st.vw = null;
@@ -164,7 +179,7 @@ function change(fn) {
 }
 const metaOf = r => ({ name: r.name, nutzung: r.nutzung, temp: r.temp, beheizt: r.beheizt, bestandsaufnahmeId: r.bestandsaufnahmeId, mitte: r.mitte, soll: (fl().meta.find(m => m.bestandsaufnahmeId && m.bestandsaufnahmeId === r.bestandsaufnahmeId) || {}).soll ?? null });
 function undoRedo(from, to) { const e = from.pop(); if (!e) return; const f = st.floors.find(x => x.id === e.fid); if (!f) return; to.push({ fid: f.id, s: JSON.stringify({ g: f.g, meta: f.meta }) }); const o = JSON.parse(e.s); f.g = o.g; f.meta = o.meta; if (st.fid !== f.id) selectFloor(f.id); st.sel = null; st.dirty = true; scheduleSave(); refresh(); }
-function scheduleSave() { if (!st.db) return; clearTimeout(st.saveTimer); setSync('Ungespeichert', 'warn'); st.saveTimer = setTimeout(save, 1500); }
+function scheduleSave() { if (!st.db && !st.local) return; clearTimeout(st.saveTimer); setSync('Ungespeichert', 'warn'); st.saveTimer = setTimeout(save, 1500); }
 function modelDoc() { const p = st.projects[st.pid]; return { id: p.id, projektName: p.name || '', version: MODEL_VERSION, quelle: 'Gebäudemodell', geaendert: Date.now(), geschosse: st.floors.map(f => { const rs = GM.roomsWithMeta(f.g, f.meta), bf = p.geschosse.find(x => x.id === f.id) || {}; return { id: f.id, name: f.name, geschossHoehe_mm: f.h, lichteHoehe_mm: bf.hoehe ? Math.round(bf.hoehe * 1000) : null, knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen, raeume: rs.map(r => ({ ...metaOf(r), flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur })) }; }) }; }
 /* IFC: in den Übergabeordner der Bestandsaufnahme schreiben (lokaler Dateiserver der Claude-App, wie dort).
    Ohne Dateiserver: als ZIP herunterladen, weil der Download-Dienst .ifc nicht annimmt. */
@@ -185,11 +200,24 @@ function zipOne(name, text) {
   end.setUint32(0, 0x06054b50, true); end.setUint16(8, 1, true); end.setUint16(10, 1, true); end.setUint32(12, cen.length + fn.length, true); end.setUint32(16, off, true);
   return new Blob([loc, fn, data, cen, fn, new Uint8Array(end.buffer)], { type: 'application/zip' });
 }
+/* lokal: Ordnerzugriff aus der Bestandsaufnahme (IndexedDB ba-fotos, Schlüssel scdir) wiederverwenden, sonst wählen lassen */
+function idbDo(mode, fn) { return new Promise(res => { try { const q = indexedDB.open('ba-fotos', 1); q.onupgradeneeded = () => q.result.createObjectStore('f'); q.onerror = () => res(undefined); q.onsuccess = () => { try { const tx = q.result.transaction('f', mode), rq = fn(tx.objectStore('f')); tx.oncomplete = () => res(rq.result); tx.onerror = () => res(undefined); } catch (e) { res(undefined); } }; } catch (e) { res(undefined); } }); }
+async function saveLocalFile(name, txt) {
+  if (window.showDirectoryPicker) {
+    let h = await idbDo('readonly', s => s.get('scdir')); if (!h || !h.getFileHandle) { h = await window.showDirectoryPicker({ mode: 'readwrite' }); await idbDo('readwrite', s => s.put(h, 'scdir')); }
+    if (h.queryPermission && await h.queryPermission({ mode: 'readwrite' }) !== 'granted' && await h.requestPermission({ mode: 'readwrite' }) !== 'granted') throw new Error('Zugriff auf den Ordner nicht erlaubt');
+    const fh = await h.getFileHandle(name, { create: true }), w = await fh.createWritable(); await w.write(txt); await w.close();
+    return 'IFC liegt im Übergabeordner „' + h.name + '“: ' + name;
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'application/x-step' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  return 'IFC heruntergeladen: ' + name;
+}
 async function exportIfc() {
   const p = st.projects[st.pid]; if (!p) return; const info = $('saveinfo'), F = st.firma || {};
   const base = String(p.name || p.id).replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim().replace(/\s+/g, '_') || 'Projekt', name = base + '_Gebaeudemodell.ifc';
   let txt; try { txt = GMIFC.exportIFC(modelDoc(), { bearbeiter: F.bearbeiter || '', organisation: F.marke || 'cL-energiePlan', nord: (p.objekt || {}).nord || 0 }); } catch (e) { info.textContent = 'IFC konnte nicht erzeugt werden: ' + e.message; return; }
   $('ifc').disabled = true; info.textContent = 'IFC wird übergeben …'; let why = '';
+  if (st.local) { try { info.textContent = await saveLocalFile(name, txt); } catch (e) { info.textContent = e && e.name === 'AbortError' ? 'Abgebrochen.' : 'IFC konnte nicht gespeichert werden: ' + ((e && e.message) || e); } $('ifc').disabled = false; return; }
   try {
     const mcp = window.claude && window.claude.use ? await window.claude.use('mcp') : null; if (!mcp) throw { code: 'server_not_connected' };
     let dir = (F.scOrdner || '').trim();
@@ -204,9 +232,11 @@ async function exportIfc() {
   $('ifc').disabled = false;
 }
 async function save() {
-  const p = st.projects[st.pid]; if (!st.db || !p) return; clearTimeout(st.saveTimer); setSync('Speichert …');
+  const p = st.projects[st.pid]; if ((!st.db && !st.local) || !p) return; clearTimeout(st.saveTimer); setSync('Speichert …');
   const doc = modelDoc();
-  try { if (JSON.stringify(doc).length > 240000) throw new Error('Modell zu groß für ein Dokument'); await st.db.doc('modell/' + p.id).set(doc); st.models[p.id] = doc; st.dirty = false; setSync('Gespeichert', 'ok'); $('saveinfo').textContent = 'Gespeichert unter modell/' + p.id + ' um ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + '.'; }
+  try { const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    if (st.local) { const all = JSON.parse(localStorage.getItem(LSM) || '{}') || {}; all[p.id] = doc; localStorage.setItem(LSM, JSON.stringify(all)); st.models[p.id] = doc; st.dirty = false; setSync('Auf diesem Gerät gespeichert', 'ok'); $('saveinfo').textContent = 'Auf diesem Gerät gespeichert um ' + t + ' (wie die Bestandsaufnahme).'; return; }
+    if (JSON.stringify(doc).length > 240000) throw new Error('Modell zu groß für ein Dokument'); await st.db.doc('modell/' + p.id).set(doc); st.models[p.id] = doc; st.dirty = false; setSync('Gespeichert', 'ok'); $('saveinfo').textContent = 'Gespeichert unter modell/' + p.id + ' um ' + t + '.'; }
   catch (e) { setSync('Speichern fehlgeschlagen', 'warn'); $('saveinfo').textContent = 'Speichern fehlgeschlagen: ' + e.message; }
 }
 
