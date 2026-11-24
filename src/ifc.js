@@ -38,11 +38,13 @@
         set(run, Math.max(0, ...proj(run, stop))); set(stop, Math.min(0, ...proj(stop, run)));
         continue;
       }
-      // drei und mehr: durchlaufende Paare bleiben, Abzweige enden an der nahen Fläche der dicksten durchlaufenden Wand
-      const through = new Set(); js.forEach(p => js.forEach(q => { if (p !== q && col(p, q)) { through.add(p); through.add(q); } }));
-      if (!through.size) continue;
-      const main = [...through].reduce((a, b) => (b.w.t > a.w.t ? b : a));
-      js.filter(j => !through.has(j)).forEach(j => set(j, Math.min(0, ...proj(j, main))));
+      // drei und mehr: das dickste durchlaufende Paar läuft durch; alle anderen Wände (auch ein zweites Paar bei
+      // Kreuzungen) enden an dessen naher Fläche
+      const pairs = []; js.forEach((p, i) => js.forEach((q, k) => { if (k > i && col(p, q)) pairs.push([p, q]); }));
+      if (!pairs.length) continue;
+      const score = pr => Math.max(pr[0].w.t, pr[1].w.t) * 1e6 + len_(pr[0]) + len_(pr[1]);
+      const mainPair = pairs.reduce((a, b) => (score(b) > score(a) ? b : a)), main = mainPair[0].w.t >= mainPair[1].w.t ? mainPair[0] : mainPair[1];
+      js.filter(j => !mainPair.includes(j)).forEach(j => set(j, Math.min(0, ...proj(j, main))));
     }
     return ext;
   }

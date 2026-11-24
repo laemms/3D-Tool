@@ -127,9 +127,12 @@
     for (const o of R) o.r.segs.forEach((s, i) => {
       const S = outN(o, i), H = hits(o, i), parts = []; let c = 0;
       const own = H.length || ext(s) ? { t: extTh(s), ext: true } : { t: s.dicke > 0 ? s.dicke / 100 : iwDef(), ext: false };
-      for (const h of H) { if (h.von - c > 0.05) parts.push({ von: c, bis: h.von, ...own }); if (h.bis > c + 0.01) { parts.push({ von: Math.max(c, h.von), bis: h.bis, t: h.d, ext: false, nb: h.nb, xi: h.xi }); c = h.bis; } }
-      if (S.L - c > 0.05) parts.push({ von: c, bis: S.L, ...own });
-      else if (parts.length) parts[parts.length - 1].bis = S.L;
+      // wie wallParts: kleine Lücken zwischen zwei Nachbarräumen (Kreuzung einer Querwand) gehören zur Innenwand
+      for (const h of H) { const gp = h.von - c, pv = parts[parts.length - 1];
+        if (gp > 0.05) { if (pv && pv.nb && gp <= 0.6) { c = pv.bis = c + gp / 2; } else if (!pv && gp <= 0.3) { /* Anfang: Nachbarabschnitt beginnt am Wandanfang */ } else { parts.push({ von: c, bis: h.von, ...own }); c = h.von; } }
+        if (h.bis > c + 0.01) { parts.push({ von: c, bis: h.bis, t: h.d, ext: false, nb: h.nb, xi: h.xi }); c = h.bis; } }
+      if (S.L - c > 0.3 || !parts.length) parts.push({ von: c, bis: S.L, ...own });
+      else parts[parts.length - 1].bis = S.L;
       PARTS.set(o.r.id + ':' + i, parts);
     });
     // Achslage: Außenwand mit der Achse auf der Rauminnenseite (Dicke nach außen); Innenwand in der Mitte des Spalts.

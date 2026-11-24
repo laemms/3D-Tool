@@ -23,8 +23,10 @@ function check(f, strict) {
   let g = { knoten: [], waende: [], oeffnungen: [] }; const A = { t: 365, ts: 0, ext: true };
   g = GM.edit.addWall(g, [0, 0], [10000, 0], A); g = GM.edit.addWall(g, [10000, 0], [10000, 8000], A); g = GM.edit.addWall(g, [10000, 8000], [0, 8000], A); g = GM.edit.addWall(g, [0, 8000], [0, 0], A);
   g = GM.edit.addWall(g, [4000, 0], [4000, 8000], { t: 115 }); g = GM.edit.addWall(g, [4000, 5000], [10000, 5000], { t: 175 });
+  g = GM.edit.addWall(g, [0, 3000], [7000, 3000], { t: 115 }); g = GM.edit.addWall(g, [7000, 0], [7000, 5000], { t: 240 }); // Kreuzungen
   check({ name: 'Testhaus', ...g }, true);
 }
+{ const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');
 const txt = exportIFC(model, { zeit: Date.UTC(2026, 10, 25), bearbeiter: 'Test' });

@@ -79,3 +79,17 @@ console.log(ok + ' Tests bestanden');
   });
 }
 console.log('Bearbeiten geprüft');
+
+// ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----
+{
+  const R = (id, x, y, w, h) => ({ id, name: id, x, y, beheizt: 'ja', temp: 20, segs: [0, 90, 180, 270].map((d, i) => ({ dir: d, len: i % 2 ? h : w, grenzt: 'aussen', nachbarId: '', oeffnungen: [] })) });
+  const og = { id: 'og', name: 'OG', raeume: [R('Kind1', 0, 0, 4, 3.5), R('Eltern', 0, 3.615, 4, 5.385), R('Bad', 4.24, 0, 2.76, 3), R('Flur', 4.24, 3.24, 2.76, 2.26), R('Kind2', 4.24, 5.74, 2.76, 3.26)] };
+  const pr = { bauteile: [{ id: 'aw', kat: 'AW', dicke: 36.5 }], geschosse: [og] };
+  const res = GM.fromBestandsaufnahme(pr, og), g = res.graph, N = new Map(g.knoten.map(n => [n.id, n]));
+  t('Querwände: keine Wandstücke, Flächen gleich', () => {
+    const kurz = g.waende.filter(w => !GM.isHilf(w)).filter(w => Math.hypot(N.get(w.b).x - N.get(w.a).x, N.get(w.b).y - N.get(w.a).y) < 300);
+    for (const q of res.quellraeume) { const m = res.raeume.find(r => r.bestandsaufnahme && r.bestandsaufnahme.id === q.id); assert.ok(m && Math.abs(m.flaeche_m2 - q.flaeche_m2) < 0.02, q.name + ' ' + (m && m.flaeche_m2) + ' statt ' + q.flaeche_m2); }
+    assert.strictEqual(res.raeume.length, 5); assert.strictEqual(kurz.length, 0, 'kurze Wände: ' + kurz.map(w => w.t).join(','));
+  });
+  module.exports = { querwand: { name: 'OG', ...g } };
+}
