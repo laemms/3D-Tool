@@ -4,6 +4,9 @@
 (function (root) {
   'use strict';
   const TOL = 30; // mm Fangradius
+  const HILF = 1; // mm: Hilfskante, schließt nur die Topologie (Achsversatz), hat keinen Wandkörper
+  const MIN_RAUM = 0.3; // m²: kleinere Flächen ohne Raumzuordnung sind Reste aus Achsversätzen
+  const isHilf = w => w.t < 20;
 
   /* ---------- kleine Geometrie ---------- */
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
@@ -129,9 +132,10 @@
       else if (parts.length) parts[parts.length - 1].bis = S.L;
       PARTS.set(o.r.id + ':' + i, parts);
     });
-    // Achslage: Außenwand mit der Achse auf der Raumseite; Innenwand auf der Fläche des Raums, dessen Seite weiterläuft
-    // (mehr Abschnitte), sonst des Raums mit der kleineren Kennung. So bleibt jede durchgehende Raumseite eine gerade Achse.
-    const axOf = (o, i, pt) => { if (!pt.nb) return 0; const mine = PARTS.get(o.r.id + ':' + i).length, theirs = (PARTS.get(pt.nb + ':' + pt.xi) || []).length; return mine > theirs || (mine === theirs && String(o.r.id) < String(pt.nb)) ? 0 : pt.t; };
+    // Achslage: Außenwand mit der Achse auf der Rauminnenseite (Dicke nach außen); Innenwand in der Mitte des Spalts.
+    // Die Mitte ist von beiden Seiten gleich, so wird eine Innenwand nie doppelt erzeugt. Wo eine Raumseite von
+    // Außen- auf Innenwand wechselt, verbindet eine Hilfskante ohne Wandkörper die beiden Achsen.
+    const axOf = (o, i, pt) => (pt.nb ? pt.t / 2 : 0);
     // 2. Durchgang: Achsstücke
     for (const o of R) {
       const pieces = [];
@@ -151,7 +155,7 @@
       for (let k = 0; k < n; k++) {
         const A = pieces[k], B = pieces[(k + 1) % n];
         if (Math.abs(cross(A.d, B.d)) > 1e-3) { const x = lineX(A.a, A.d, B.a, B.d); if (x) { A.b = x; B.a = x; } }
-        else if (len(sub(A.b, B.a)) > 0.005) segs.push({ a: A.b.map(v => v * 1000), b: B.a.map(v => v * 1000), t: Math.max(A.t, B.t) * 1000, ts: Math.max(A.t, B.t) * 500, ext: A.ext && B.ext, src: 'stoss' });
+        else if (len(sub(A.b, B.a)) > 0.005) segs.push({ a: A.b.map(v => v * 1000), b: B.a.map(v => v * 1000), t: HILF, ts: HILF / 2, ext: false, src: 'stoss' }); // Achsversatz ohne Wandkörper: beide Wandstücke stoßen dort bündig aneinander
       }
       pieces.forEach(pc => segs.push({ a: pc.a.map(v => v * 1000), b: pc.b.map(v => v * 1000), t: pc.t * 1000, ts: pc.ts * 1000, ext: pc.ext, src: pc.src }));
       const qi = o.q.slice(0, -1); roomRefs.push({ id: o.r.id, name: o.r.name, nutzung: o.r.nutzung, beheizt: o.r.beheizt, temp: o.r.temp, mitte: centroid(qi).map(v => v * 1000), flaeche_m2: Math.abs(o.sa) });
@@ -169,7 +173,7 @@
     // Räume des Graphen den Räumen der Bestandsaufnahme zuordnen
     const all = rooms(g).map(fr => { const ref = roomRefs.find(r => inPoly(r.mitte, fr.achse)); return { ...fr, bestandsaufnahme: ref || null }; });
     // kleine Flächen ohne Raum entstehen, wo sich Wände im Altdatensatz überlappen: als Restfläche melden
-    const rs = all.filter(r => r.bestandsaufnahme || r.flaeche_m2 >= 0.3), rest = all.filter(r => !r.bestandsaufnahme && r.flaeche_m2 < 0.3);
+    const rs = all.filter(r => r.bestandsaufnahme || r.flaeche_m2 >= MIN_RAUM), rest = all.filter(r => !r.bestandsaufnahme && r.flaeche_m2 < MIN_RAUM);
     return { graph: g, raeume: rs, restflaechen: rest, quellraeume: roomRefs };
   }
 
@@ -206,9 +210,18 @@
   function roomsWithMeta(g, meta) {
     const used = new Set(), names = new Set((meta || []).map(x => x.name)); let k = 0;
     const fresh = () => { do k++; while (names.has('Raum ' + k)); names.add('Raum ' + k); return 'Raum ' + k; };
-    return rooms(g).map(r => { const m = (meta || []).find(x => !used.has(x) && x.mitte && inPoly(x.mitte, r.achse)); if (m) used.add(m); const c = centroid(r.kontur); return { ...r, name: m ? m.name : fresh(), nutzung: m ? m.nutzung || '' : '', temp: m ? m.temp : null, beheizt: m ? m.beheizt : null, bestandsaufnahmeId: m ? m.bestandsaufnahmeId || null : null, mitte: [Math.round(c[0]), Math.round(c[1])] }; });
+    return rooms(g).map(r => { const m = (meta || []).find(x => !used.has(x) && x.mitte && inPoly(x.mitte, r.achse)); if (!m && r.flaeche_m2 < MIN_RAUM) return null; if (m) used.add(m); const c = centroid(r.kontur); return { ...r, name: m ? m.name : fresh(), nutzung: m ? m.nutzung || '' : '', temp: m ? m.temp : null, beheizt: m ? m.beheizt : null, bestandsaufnahmeId: m ? m.bestandsaufnahmeId || null : null, mitte: [Math.round(c[0]), Math.round(c[1])] }; }).filter(Boolean);
   }
 
+
+
+  /* Stoßstellen: über Hilfskanten verbundene Knoten bilden eine gemeinsame Stoßstelle (Achsversatz) */
+  function junctions(g) {
+    const par = new Map(g.knoten.map(n => [n.id, n.id])), find = x => { while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
+    g.waende.filter(isHilf).forEach(w => { const a = find(w.a), b = find(w.b); if (a !== b) par.set(a, b); });
+    const J = new Map(); g.waende.filter(w => !isHilf(w)).forEach(w => { for (const id of [w.a, w.b]) { const r = find(id); if (!J.has(r)) J.set(r, []); J.get(r).push({ w, at: id }); } });
+    return [...J.values()];
+  }
 
   /* Wandstöße: an jedem Knoten die Fläche zwischen den Wandkanten schließen (konvexe Hülle der Kantenschnitte) */
   function hull(P) { const q = P.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
@@ -216,16 +229,15 @@
     for (const p of q.reverse()) { while (up.length > 1 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
     return lo.slice(0, -1).concat(up.slice(0, -1)); }
   function nodeCaps(g) {
-    const N = nodeMap(g), at = new Map(); g.waende.forEach(w => { for (const id of [w.a, w.b]) { if (!at.has(id)) at.set(id, []); at.get(id).push(w); } });
-    const caps = [];
-    for (const [id, ws] of at) { if (ws.length < 2) continue; const n = N.get(id), c = [n.x, n.y], lines = [], pts = [], tmax = Math.max(...ws.map(w => w.t));
-      for (const w of ws) { const o = N.get(w.a === id ? w.b : w.a), d = sub([o.x, o.y], c), L = len(d) || 1, u = [d[0] / L, d[1] / L], S0 = [-u[1], u[0]], ts0 = w.ts == null ? w.t / 2 : w.ts, ts = w.a === id ? ts0 : w.t - ts0; // Seite relativ zur Richtung vom Knoten weg
+    const N = nodeMap(g), caps = [];
+    for (const js of junctions(g)) { if (js.length < 2) continue; const lines = [], pts = [], tmax = Math.max(...js.map(j => j.w.t)); let cx = 0, cy = 0;
+      for (const { w, at } of js) { const n = N.get(at), c = [n.x, n.y], o = N.get(w.a === at ? w.b : w.a), d = sub([o.x, o.y], c), L = len(d) || 1, u = [d[0] / L, d[1] / L], S0 = [-u[1], u[0]], ts0 = w.ts == null ? w.t / 2 : w.ts, ts = w.a === at ? ts0 : w.t - ts0; cx += c[0] / js.length; cy += c[1] / js.length;
         const A = [c[0] + S0[0] * ts, c[1] + S0[1] * ts], B = [c[0] - S0[0] * (w.t - ts), c[1] - S0[1] * (w.t - ts)]; pts.push(A, B); lines.push({ p: A, d: u, w }, { p: B, d: u, w }); }
-      for (let i = 0; i < lines.length; i++) for (let j = i + 1; j < lines.length; j++) { if (lines[i].w === lines[j].w) continue; const x = lineX(lines[i].p, lines[i].d, lines[j].p, lines[j].d); if (x && len(sub(x, c)) <= tmax * 1.5) pts.push(x); }
-      const h = hull(pts); if (h.length >= 3) caps.push({ knoten: id, poly: h.map(p => [Math.round(p[0]), Math.round(p[1])]), ext: ws.some(w => w.ext) }); }
+      for (let i = 0; i < lines.length; i++) for (let j = i + 1; j < lines.length; j++) { if (lines[i].w === lines[j].w) continue; const x = lineX(lines[i].p, lines[i].d, lines[j].p, lines[j].d); if (x && len(sub(x, [cx, cy])) <= tmax * 1.5) pts.push(x); }
+      const h = hull(pts); if (h.length >= 3) caps.push({ knoten: js[0].at, poly: h.map(p => [Math.round(p[0]), Math.round(p[1])]), ext: js.some(j => j.w.ext) }); }
     return caps;
   }
 
-  const api = { nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  const api = { junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

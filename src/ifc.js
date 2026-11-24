@@ -19,28 +19,30 @@
 
   /* Verlängerung (+) bzw. Kürzung (−) jedes Wandendes in mm */
   function wallEnds(g) {
-    const N = new Map(g.knoten.map(n => [n.id, n])), at = new Map(), ext = new Map();
-    g.waende.forEach(w => { for (const id of [w.a, w.b]) { if (!at.has(id)) at.set(id, []); at.get(id).push(w); } ext.set(w.id, { a: 0, b: 0 }); });
+    const N = new Map(g.knoten.map(n => [n.id, n])), ext = new Map();
+    g.waende.forEach(w => ext.set(w.id, { a: 0, b: 0 }));
+    const P = id => { const n = N.get(id); return [n.x, n.y]; };
     const dirFrom = (w, id) => { const n = N.get(id), o = N.get(w.a === id ? w.b : w.a), d = [o.x - n.x, o.y - n.y], L = Math.hypot(d[0], d[1]) || 1; return [d[0] / L, d[1] / L]; };
-    // Eckpunkte des Wandkörpers am Knoten, relativ zum Knoten
-    const corners = (w, id) => { const u = dirFrom(w, id), S = [-u[1], u[0]], ts0 = w.ts == null ? w.t / 2 : w.ts, ts = w.a === id ? ts0 : w.t - ts0; return [[S[0] * ts, S[1] * ts], [-S[0] * (w.t - ts), -S[1] * (w.t - ts)]]; };
-    const proj = (w, id, other) => { const u = dirFrom(w, id), out = [-u[0], -u[1]]; return corners(other, id).map(c => c[0] * out[0] + c[1] * out[1]); };
-    const set = (w, id, v) => { ext.get(w.id)[w.a === id ? 'a' : 'b'] = v; };
-    for (const [id, ws] of at) {
-      if (ws.length < 2) continue;
-      const col = (p, q) => { const a = dirFrom(p, id), b = dirFrom(q, id); return a[0] * b[0] + a[1] * b[1] < -0.999; };
-      if (ws.length === 2) {
-        const [p, q] = ws; if (col(p, q)) continue;
-        const lp = Math.hypot(...['x', 'y'].map(k => N.get(p.a)[k] - N.get(p.b)[k])), lq = Math.hypot(...['x', 'y'].map(k => N.get(q.a)[k] - N.get(q.b)[k]));
-        const run = (p.ext !== q.ext ? (p.ext ? p : q) : (lp >= lq ? p : q)), stop = run === p ? q : p;
-        set(run, id, Math.max(0, ...proj(run, id, stop))); set(stop, id, Math.min(0, ...proj(stop, id, run)));
+    // Eckpunkte des Wandkörpers am eigenen Knoten, absolut
+    const corners = (w, id) => { const c = P(id), u = dirFrom(w, id), S = [-u[1], u[0]], ts0 = w.ts == null ? w.t / 2 : w.ts, ts = w.a === id ? ts0 : w.t - ts0; return [[c[0] + S[0] * ts, c[1] + S[1] * ts], [c[0] - S[0] * (w.t - ts), c[1] - S[1] * (w.t - ts)]]; };
+    // Lage der Körperecken einer anderen Wand jenseits des Wandendes (positiv = über das Ende hinaus)
+    const proj = (j, k) => { const u = dirFrom(j.w, j.at), out = [-u[0], -u[1]], c = P(j.at); return corners(k.w, k.at).map(q => (q[0] - c[0]) * out[0] + (q[1] - c[1]) * out[1]); };
+    const set = (j, v) => { ext.get(j.w.id)[j.w.a === j.at ? 'a' : 'b'] = v; };
+    const col = (p, q) => { const a = dirFrom(p.w, p.at), b = dirFrom(q.w, q.at); return a[0] * b[0] + a[1] * b[1] < -0.999; };
+    const len_ = j => Math.hypot(...['x', 'y'].map(k => N.get(j.w.a)[k] - N.get(j.w.b)[k]));
+    for (const js of GM.junctions(g)) {
+      if (js.length < 2) continue;
+      if (js.length === 2) {
+        const [p, q] = js; if (col(p, q)) continue;
+        const run = (p.w.ext !== q.w.ext ? (p.w.ext ? p : q) : (len_(p) >= len_(q) ? p : q)), stop = run === p ? q : p;
+        set(run, Math.max(0, ...proj(run, stop))); set(stop, Math.min(0, ...proj(stop, run)));
         continue;
       }
       // drei und mehr: durchlaufende Paare bleiben, Abzweige enden an der nahen Fläche der dicksten durchlaufenden Wand
-      const through = new Set(); ws.forEach(p => ws.forEach(q => { if (p !== q && col(p, q)) { through.add(p); through.add(q); } }));
+      const through = new Set(); js.forEach(p => js.forEach(q => { if (p !== q && col(p, q)) { through.add(p); through.add(q); } }));
       if (!through.size) continue;
-      const main = [...through].reduce((a, b) => (b.t > a.t ? b : a));
-      ws.filter(w => !through.has(w)).forEach(w => set(w, id, Math.min(0, ...proj(w, id, main))));
+      const main = [...through].reduce((a, b) => (b.w.t > a.w.t ? b : a));
+      js.filter(j => !through.has(j)).forEach(j => set(j, Math.min(0, ...proj(j, main))));
     }
     return ext;
   }
@@ -80,7 +82,7 @@
       const lpS = LP(lpB, 0, 0, elev[fi] / 1000), st = E(`IFCBUILDINGSTOREY(${G('st|' + f.id)},${oh},${S(f.name || 'Geschoss')},$,$,${lpS},$,$,.ELEMENT.,${M(elev[fi])})`); storeys.push(st);
       const els = [], sp = [], ends = wallEnds(g);
       for (const w of g.waende) {
-        const a = N.get(w.a), b = N.get(w.b); if (!a || !b) continue;
+        const a = N.get(w.a), b = N.get(w.b); if (!a || !b || GM.isHilf(w)) continue; // Hilfskanten haben keinen Wandkörper
         const ea = ends.get(w.id).a, eb = ends.get(w.id).b, A = W([a.x, a.y]), Bp = W([b.x, b.y]), dx = Bp[0] - A[0], dy = Bp[1] - A[1], Lm = Math.hypot(dx, dy); if (Lm < 0.01) continue;
         const ux = dx / Lm, uy = dy / Lm, ts = (w.ts == null ? w.t / 2 : w.ts), x0 = -ea / 1000, x1 = Lm + eb / 1000;
         // im Bildschirm liegt die S-Seite rechts der Laufrichtung; nach dem Spiegeln von y ist das lokal −Y

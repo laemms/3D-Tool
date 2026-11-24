@@ -46,9 +46,9 @@ t('Ausrichtung: Achse auf der Innenseite ergibt dieselbe Innenfläche', () => {
   assert.strictEqual(r.length, 1); assert.ok(Math.abs(r[0].flaeche_m2 - 12) < 1e-6, r[0].flaeche_m2);
 });
 
-t('Beispiel-EFH 1978, EG: keine Versatzstücke unter 150 mm', () => {
+t('Beispiel-EFH 1978, EG: keine Wandstücke unter 150 mm (Hilfskanten ausgenommen)', () => {
   const res = GM.fromBestandsaufnahme(p, p.geschosse[1]), N = new Map(res.graph.knoten.map(n => [n.id, n]));
-  const kurz = res.graph.waende.map(w => Math.hypot(N.get(w.b).x - N.get(w.a).x, N.get(w.b).y - N.get(w.a).y)).filter(l => l < 150);
+  const kurz = res.graph.waende.filter(w => !GM.isHilf(w)).map(w => Math.hypot(N.get(w.b).x - N.get(w.a).x, N.get(w.b).y - N.get(w.a).y)).filter(l => l < 150);
   console.log('    Wände ' + res.graph.waende.length + ', kurze ' + kurz.length + ' (' + kurz.map(Math.round).join(', ') + ' mm), Restflächen ' + res.restflaechen.length);
   assert.ok(kurz.length === 0, 'kurze Wände: ' + kurz.length);
 });
