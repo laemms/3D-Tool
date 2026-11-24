@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gebäudemodell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: Werkzeug für den Energieberater, ruhig und präzise, wie das Bestandsaufnahme-Tool
+   IDEA: ein Planblatt – Grundriss mit Wandstärken, daneben die Prüfliste
+   PICTURE: der Grundriss bzw. das 3D-Modell selbst, groß, oben
+   COLOUR and TYPE: Farben und Schrift des Bestandsaufnahme-Tools (Grün #0b8a5f, Plus Jakarta Sans)
+   LAYOUT: Kopfzeile, Plan links breit, Prüfung rechts; unter 900px untereinander */
+:root{color-scheme:light dark;--bg:light-dark(#f1f4f2,#090d0b);--card:light-dark(#fff,#111814);--ink:light-dark(#0e1512,#ecf2ee);--mute:light-dark(#5b6b63,#9fb0a7);--line:light-dark(rgba(14,21,18,.10),rgba(255,255,255,.09));--line2:light-dark(rgba(14,21,18,.18),rgba(255,255,255,.18));--accent:light-dark(#0b8a5f,#2fd49a);--soft:light-dark(#dcf4e8,#11302a);--wall:light-dark(#26332d,#c9d6cf);--wallin:light-dark(#7d8c85,#7b8d84);--room:light-dark(#e9f6ef,#14231c);--bad:light-dark(#c0281f,#ff8a80);--warn:light-dark(#9a6200,#f5c46a);--win:light-dark(#2f7fc1,#86c0f0);--door:light-dark(#8a5a2b,#dba86e);--w3e:light-dark(#c3cec8,#5d6d65);--w3i:light-dark(#e2e9e5,#43514a)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:clip}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:12px max(3vw,16px);border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
+header h1{font-size:20px;margin:0;font-weight:700}
+header a{color:var(--accent);text-decoration:none;font-weight:600}
+.sync{margin-inline-start:auto;font-size:13px;color:var(--mute)}
+.sync.ok{color:var(--accent)}.sync.warn{color:var(--warn)}
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16px max(3vw,16px);max-width:1400px;margin:0 auto}
+@media(max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+select,button{font:inherit;font-size:15px;min-height:44px;border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);padding:0 12px}
+button{cursor:pointer;font-weight:600}button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border-color:transparent}
+button[aria-pressed=true]{background:var(--soft);border-color:var(--accent);color:var(--accent)}
+button:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+.fig{position:relative;height:clamp(340px,62vh,720px);border-radius:10px;background:var(--bg);overflow:hidden;touch-action:none}
+.fig>svg,.fig>canvas{position:absolute;inset:0;width:100%;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--mute);margin-top:8px}
+.legend i{display:inline-block;width:14px;height:8px;border-radius:2px;margin-inline-end:6px;vertical-align:middle}
+h2{font-size:17px;margin:0 0 8px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:500}
+td.r,th.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ok{color:var(--accent)}.no{color:var(--bad)}.warn{color:var(--warn)}
+ul.chk{list-style:none;padding:0;margin:0 0 4px;font-size:14px}ul.chk li{padding:5px 0;border-bottom:1px solid var(--line);display:flex;gap:8px}ul.chk b{width:18px;flex:none}
+.small{font-size:13px;color:var(--mute)}
+.side{display:grid;gap:16px;align-content:start}
+@media(prefers-reduced-motion:no-preference){.fig svg{transition:opacity .2s}}
+</style>
+</head>
+<body>
+<header><a href="index.html">‹ Bestandsaufnahme</a><h1>Gebäudemodell</h1><span class="small">Phase 0 · Technik-Probe</span><span id="sync" class="sync">Verbinde …</span></header>
+<main>
+  <section class="card">
+    <div class="bar">
+      <label class="small" for="proj">Projekt</label><select id="proj"></select>
+      <span id="floors" class="bar" style="margin:0"></span>
+      <span style="margin-inline-start:auto"></span>
+      <button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button>
+    </div>
+    <div class="fig" id="fig"><svg id="plan" role="img" aria-label="Grundriss aus dem Wandgraph"></svg><canvas id="c3d" hidden></canvas></div>
+    <div class="legend"><span><i style="background:var(--wall)"></i>Außenwand</span><span><i style="background:var(--wallin)"></i>Innenwand</span><span><i style="background:var(--win)"></i>Fenster</span><span><i style="background:var(--door)"></i>Tür</span><span>Linie in der Wand: Wandachse · Punkte: Knoten</span></div>
+  </section>
+  <aside class="side">
+    <section class="card"><h2>Rundlauf-Prüfung</h2><p class="small" style="margin-top:0">Räume aus der Bestandsaufnahme → Wandgraph → vom Kern neu berechnete Räume.</p><div id="cmp"></div></section>
+    <section class="card"><h2>Phase 0</h2><ul class="chk" id="chk"></ul>
+      <button class="pri" id="save" disabled>Modell speichern</button>
+      <p class="small" id="saveinfo">Speichert den Wandgraph in der Sammlung <code>modell</code>. Die Projekte der Bestandsaufnahme bleiben unverändert.</p></section>
+  </aside>
+</main>
+<script>/*CORE*/</script>
+<script>
+{
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = (v, d = 2) => v == null ? '–' : v.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const st = { db: null, projects: {}, pid: null, fid: null, res: null, view: '2d', checks: { db: null, core: null, three: null, save: null }, t3: null };
+
+function setSync(t, cls) { const e = $('sync'); e.textContent = t; e.className = 'sync ' + (cls || ''); }
+function renderChecks() {
+  const c = st.checks, row = (v, t) => `<li><b class="${v === true ? 'ok' : v === false ? 'no' : 'small'}">${v === true ? '✓' : v === false ? '✗' : '…'}</b><span>${t}</span></li>`;
+  $('chk').innerHTML = row(c.db, 'Gemeinsame Datenbank gelesen' + (st.dbInfo ? ' (' + esc(st.dbInfo) + ')' : '')) + row(c.core, 'Kern erzeugt Räume aus dem Wandgraph') + row(c.three, '3D-Bibliothek (Three.js) geladen') + row(c.save, 'Modell in eigener Sammlung gespeichert');
+}
+
+/* ---------- Daten ---------- */
+async function init() {
+  renderChecks();
+  let db = null;
+  try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+  st.db = db;
+  if (!db) { st.checks.db = false; st.dbInfo = 'nicht verfügbar'; setSync('Keine Datenbank', 'warn'); renderChecks(); return; }
+  try {
+    const snap = await Promise.race([db.collection('projekte').get(), new Promise((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), 10000))]);
+    snap.docs.forEach(d => { const x = d.data(); if (x && x.id && Array.isArray(x.geschosse)) st.projects[x.id] = x; });
+    st.checks.db = true; st.dbInfo = Object.keys(st.projects).length + ' Projekte'; setSync('Verbunden', 'ok');
+  } catch (e) { st.checks.db = false; st.dbInfo = e.message; setSync('Datenbank nicht erreichbar', 'warn'); }
+  renderChecks();
+  const ids = Object.keys(st.projects).sort((a, b) => (a === 'beispiel' ? -1 : b === 'beispiel' ? 1 : 0));
+  $('proj').innerHTML = ids.map(id => `<option value="${esc(id)}">${esc(st.projects[id].name || id)}</option>`).join('');
+  if (ids.length) selectProject(ids[0]);
+  $('save').disabled = !ids.length;
+}
+function selectProject(pid) {
+  st.pid = pid; const p = st.projects[pid];
+  const fs = p.geschosse.filter(f => (f.raeume || []).length);
+  st.fid = (fs.find(f => /^(eg|erd)/i.test(f.name || '')) || fs[0] || p.geschosse[0] || {}).id;
+  $('floors').innerHTML = p.geschosse.map(f => `<button data-f="${esc(f.id)}" aria-pressed="${f.id === st.fid}">${esc(f.name || 'Geschoss')}</button>`).join('');
+  compute();
+}
+function floor() { const p = st.projects[st.pid]; return p && p.geschosse.find(f => f.id === st.fid); }
+function compute() {
+  const p = st.projects[st.pid], f = floor(); st.res = null;
+  if (!p || !f) return draw();
+  try { st.res = GM.fromBestandsaufnahme(p, f); st.checks.core = st.res.raeume.length > 0 || !(f.raeume || []).length; }
+  catch (e) { st.checks.core = false; st.err = e.message; }
+  renderChecks(); renderCmp(); draw();
+}
+
+/* ---------- Vergleichstabelle ---------- */
+function renderCmp() {
+  const r = st.res; if (!r) { $('cmp').innerHTML = `<p class="no">Berechnung fehlgeschlagen${st.err ? ': ' + esc(st.err) : ''}.</p>`; return; }
+  const rows = r.quellraeume.map(q => { const m = r.raeume.find(x => x.bestandsaufnahme && x.bestandsaufnahme.id === q.id), d = m ? Math.round((m.flaeche_m2 - q.flaeche_m2) * 100) / 100 + 0 : null, ok = m && Math.abs(d) < 0.05;
+    return `<tr><td>${esc(q.name)}</td><td class="r">${nf(q.flaeche_m2)}</td><td class="r">${m ? nf(m.flaeche_m2) : '–'}</td><td class="r ${ok ? 'ok' : 'no'}">${m ? (d >= 0 ? '+' : '') + nf(d) : 'fehlt'}</td></tr>`; }).join('');
+  const g = r.graph, rest = r.restflaechen.length;
+  $('cmp').innerHTML = `<table><thead><tr><th>Raum</th><th class="r">Soll m²</th><th class="r">Kern m²</th><th class="r">Δ</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="small">Keine Räume in diesem Geschoss.</td></tr>'}</tbody></table>
+  <p class="small">${g.knoten.length} Knoten · ${g.waende.length} Wände · ${g.oeffnungen.length} Öffnungen${rest ? ` · <span class="warn">${rest} Restfläche${rest > 1 ? 'n' : ''} unter 0,3 m² (überlappende Wände im Altdatensatz)</span>` : ''}</p>`;
+}
+
+/* ---------- 2D-Plan ---------- */
+function draw() { st.view === '3d' ? draw3d() : draw2d(); }
+function draw2d() {
+  const svg = $('plan'), r = st.res; if (!r || !r.graph.knoten.length) { svg.innerHTML = '<text x="20" y="40" fill="currentColor">Keine Wände in diesem Geschoss.</text>'; return; }
+  const W = svg.clientWidth || 800, H = svg.clientHeight || 500, g = r.graph, N = new Map(g.knoten.map(n => [n.id, n]));
+  let x0 = 1e12, y0 = 1e12, x1 = -1e12, y1 = -1e12; g.knoten.forEach(n => { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); });
+  const pad = 400, sc = Math.min(W / (x1 - x0 + 2 * pad), H / (y1 - y0 + 2 * pad)), ox = (W - (x1 - x0) * sc) / 2 - x0 * sc, oy = (H - (y1 - y0) * sc) / 2 - y0 * sc;
+  const X = v => (v * sc + ox).toFixed(1), Y = v => (v * sc + oy).toFixed(1), P = q => q.map(c => X(c[0]) + ',' + Y(c[1])).join(' ');
+  const quad = (a, b, t, o0 = 0, o1) => { const d = [b.x - a.x, b.y - a.y], L = Math.hypot(d[0], d[1]) || 1, u = [d[0] / L, d[1] / L], n = [-u[1] * t / 2, u[0] * t / 2], s = o1 == null ? L : o1, A = [a.x + u[0] * o0, a.y + u[1] * o0], B = [a.x + u[0] * s, a.y + u[1] * s]; return [[A[0] + n[0], A[1] + n[1]], [B[0] + n[0], B[1] + n[1]], [B[0] - n[0], B[1] - n[1]], [A[0] - n[0], A[1] - n[1]]]; };
+  let s = '';
+  r.raeume.forEach(rm => { s += `<polygon points="${P(rm.kontur)}" fill="var(--room)"/>`; });
+  g.waende.filter(w => !w.ext).forEach(w => { s += `<polygon points="${P(quad(N.get(w.a), N.get(w.b), w.t))}" fill="var(--wallin)"/>`; });
+  g.waende.filter(w => w.ext).forEach(w => { s += `<polygon points="${P(quad(N.get(w.a), N.get(w.b), w.t))}" fill="var(--wall)"/>`; });
+  g.oeffnungen.forEach(o => { const w = g.waende.find(x => x.id === o.wand); if (!w) return; const tuer = /tuer/.test(o.typ || ''); s += `<polygon points="${P(quad(N.get(w.a), N.get(w.b), w.t + 20, Math.max(0, o.abstand), o.abstand + o.breite))}" fill="var(--bg)" stroke="${tuer ? 'var(--door)' : 'var(--win)'}" stroke-width="2"/>`; });
+  g.waende.forEach(w => { const a = N.get(w.a), b = N.get(w.b); s += `<line x1="${X(a.x)}" y1="${Y(a.y)}" x2="${X(b.x)}" y2="${Y(b.y)}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3" opacity=".9"/>`; });
+  g.knoten.forEach(n => { s += `<circle cx="${X(n.x)}" cy="${Y(n.y)}" r="2.6" fill="var(--accent)"/>`; });
+  r.raeume.forEach(rm => { const c = GM.centroid(rm.kontur), name = rm.bestandsaufnahme ? rm.bestandsaufnahme.name : 'Raum'; s += `<text x="${X(c[0])}" y="${Y(c[1])}" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">${esc(name)}</text><text x="${X(c[0])}" y="${(+Y(c[1]) + 18).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--mute)">${nf(rm.flaeche_m2)} m²</text>`; });
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.innerHTML = s;
+}
+
+/* ---------- 3D ---------- */
+async function three() {
+  if (window.THREE) return true;
+  try { await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); }); st.checks.three = !!window.THREE; }
+  catch (e) { st.checks.three = false; }
+  renderChecks(); return !!window.THREE;
+}
+async function draw3d() {
+  const cv = $('c3d'); if (!(await three()) || !st.res) return;
+  const T = window.THREE, f = floor(), g = st.res.graph, N = new Map(g.knoten.map(n => [n.id, n])), Hw = Math.round(((f && f.geschossHoehe) || 2.8) * 1000);
+  if (!st.t3) {
+    const rnd = new T.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }), scene = new T.Scene(), cam = new T.PerspectiveCamera(40, 1, 100, 200000);
+    scene.add(new T.HemisphereLight(0xffffff, 0x8a9a92, 0.9)); const sun = new T.DirectionalLight(0xffffff, 0.6); sun.position.set(-1, 2, 1.5); scene.add(sun);
+    st.t3 = { rnd, scene, cam, grp: null, rot: 1.15, tilt: 0.7, dist: 20000, c: [0, 0, 0] };
+    let drag = null; cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointermove', e => { if (!drag) return; const t = st.t3; t.rot -= (e.clientX - drag[0]) * 0.008; t.tilt = Math.max(0.1, Math.min(1.45, t.tilt + (e.clientY - drag[1]) * 0.006)); drag = [e.clientX, e.clientY]; frame(); });
+    cv.addEventListener('pointerup', () => { drag = null; });
+    cv.addEventListener('wheel', e => { e.preventDefault(); st.t3.dist = Math.max(3000, Math.min(120000, st.t3.dist * (e.deltaY > 0 ? 1.1 : 0.9))); frame(); }, { passive: false });
+    new ResizeObserver(() => { if (st.view === '3d') frame(); }).observe(cv);
+  }
+  const t = st.t3; if (t.grp) t.scene.remove(t.grp); const grp = new T.Group(); t.grp = grp;
+  const probe = document.createElement('i'); document.body.appendChild(probe); const col = v => { probe.style.color = `var(${v})`; return new T.Color(getComputedStyle(probe).color); };
+  const mExt = new T.MeshLambertMaterial({ color: col('--w3e') }), mIn = new T.MeshLambertMaterial({ color: col('--w3i') }), mFl = new T.MeshLambertMaterial({ color: col('--room') }), mWin = new T.MeshLambertMaterial({ color: col('--win'), transparent: true, opacity: 0.45 }); probe.remove(); mFl.side = T.DoubleSide;
+  // Wandstück als Quader: entlang der Achse von s0 bis s1, Höhe z0 bis z1 (alles mm); Bildschirm-y wird 3D-z
+  const piece = (w, s0, s1, z0, z1, m) => { if (s1 - s0 < 5 || z1 - z0 < 5) return; const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], c = (s0 + s1) / 2;
+    const mesh = new T.Mesh(new T.BoxGeometry(s1 - s0, z1 - z0, Math.max(w.t, 20)), m); mesh.position.set(a.x + u[0] * c, (z0 + z1) / 2, a.y + u[1] * c); mesh.rotation.y = -Math.atan2(u[1], u[0]); grp.add(mesh); };
+  for (const w of g.waende) {
+    const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), m = w.ext ? mExt : mIn, ops = g.oeffnungen.filter(o => o.wand === w.id).map(o => ({ ...o, s0: Math.max(0, o.abstand), s1: Math.min(L, o.abstand + o.breite) })).sort((x, y) => x.s0 - y.s0);
+    let c = 0; for (const o of ops) { piece(w, c, o.s0, 0, Hw, m); piece(w, o.s0, o.s1, 0, o.brh, m); piece(w, o.s0, o.s1, o.brh + o.hoehe, Hw, m); if (!/tuer/.test(o.typ || '')) piece(w, o.s0, o.s1, o.brh, o.brh + o.hoehe, mWin); c = o.s1; }
+    piece(w, c, L, 0, Hw, m);
+  }
+  for (const rm of st.res.raeume) { const sh = new T.Shape(rm.kontur.map(q => new T.Vector2(q[0], q[1]))), ms = new T.Mesh(new T.ShapeGeometry(sh), mFl); ms.rotation.x = Math.PI / 2; grp.add(ms); }
+  let x0 = 1e12, z0 = 1e12, x1 = -1e12, z1 = -1e12; g.knoten.forEach(n => { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); z0 = Math.min(z0, n.y); z1 = Math.max(z1, n.y); });
+  t.c = [(x0 + x1) / 2, 1000, (z0 + z1) / 2]; t.dist = Math.max(x1 - x0, z1 - z0) * 1.9 + 4000; t.scene.add(grp); frame();
+}
+function frame() {
+  const t = st.t3, cv = $('c3d'); if (!t) return; const w = cv.clientWidth || 800, h = cv.clientHeight || 500;
+  t.rnd.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); t.rnd.setSize(w, h, false); t.cam.aspect = w / h; t.cam.updateProjectionMatrix();
+  t.cam.position.set(t.c[0] + Math.cos(t.rot) * Math.cos(t.tilt) * t.dist, t.c[1] + Math.sin(t.tilt) * t.dist, t.c[2] + Math.sin(t.rot) * Math.cos(t.tilt) * t.dist); t.cam.lookAt(t.c[0], t.c[1], t.c[2]); t.rnd.render(t.scene, t.cam);
+}
+
+/* ---------- Speichern in eigener Sammlung ---------- */
+async function save() {
+  const p = st.projects[st.pid]; if (!st.db || !p) return; $('save').disabled = true; $('saveinfo').textContent = 'Speichert …';
+  try {
+    const geschosse = p.geschosse.map(f => { const r = GM.fromBestandsaufnahme(p, f); return { id: f.id, name: f.name || '', geschossHoehe_mm: Math.round((f.geschossHoehe || 2.8) * 1000), knoten: r.graph.knoten, waende: r.graph.waende.map(({ src, ...w }) => w), oeffnungen: r.graph.oeffnungen, raeume: r.raeume.map(x => ({ id: x.id, bestandsaufnahmeId: x.bestandsaufnahme ? x.bestandsaufnahme.id : null, flaeche_m2: Math.round(x.flaeche_m2 * 100) / 100, kontur: x.kontur })) }; });
+    const doc = { id: p.id, projektName: p.name || '', quelle: 'Umrechnung aus Bestandsaufnahme (Phase 0)', version: 0, geaendert: Date.now(), geschosse };
+    if (JSON.stringify(doc).length > 240000) throw new Error('Modell zu groß für ein Dokument');
+    await st.db.doc('modell/' + p.id).set(doc);
+    st.checks.save = true; $('saveinfo').textContent = 'Gespeichert unter modell/' + p.id + ' um ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + '.';
+  } catch (e) { st.checks.save = false; $('saveinfo').textContent = 'Speichern fehlgeschlagen: ' + e.message; }
+  renderChecks(); $('save').disabled = false;
+}
+
+/* ---------- Ereignisse ---------- */
+$('proj').addEventListener('change', e => selectProject(e.target.value));
+$('floors').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (!b) return; st.fid = b.dataset.f; [...$('floors').children].forEach(x => x.setAttribute('aria-pressed', x === b)); compute(); });
+const setView = v => { st.view = v; $('v2d').setAttribute('aria-pressed', v === '2d'); $('v3d').setAttribute('aria-pressed', v === '3d'); $('plan').toggleAttribute('hidden', v !== '2d'); $('c3d').toggleAttribute('hidden', v !== '3d'); draw(); };
+$('v2d').addEventListener('click', () => setView('2d')); $('v3d').addEventListener('click', () => setView('3d'));
+$('save').addEventListener('click', save);
+new ResizeObserver(() => { if (st.view === '2d') draw2d(); }).observe($('fig'));
+init();
+}
+</script>
+</body>
+</html>
