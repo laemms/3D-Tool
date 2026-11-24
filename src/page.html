@@ -61,7 +61,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 </style>
 </head>
 <body>
-<header><a href="index.html">‹ Bestandsaufnahme</a><h1>Gebäudemodell</h1><span class="small" id="stand">Phase A</span><span id="sync" class="sync">Verbinde …</span></header>
+<header><a href="index.html">‹ Bestandsaufnahme</a><h1>Gebäudemodell</h1><span class="small" id="stand">Phase A · Test</span><span id="sync" class="sync">Verbinde …</span></header>
 <main>
   <section class="card">
     <div class="bar">
@@ -101,13 +101,14 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <section class="card" id="props"><h2>Auswahl</h2><p class="small">Wand, Öffnung oder Raum antippen.</p></section>
     <section class="card"><h2>Räume</h2><div id="rooms"></div></section>
     <section class="card"><h2>Modell</h2>
-      <div class="bar"><button class="pri" id="save">Speichern</button><button id="reimport" title="Modell aus den Räumen der Bestandsaufnahme neu erzeugen">Neu übernehmen</button></div>
+      <div class="bar"><button class="pri" id="save">Speichern</button><button id="ifc">IFC exportieren</button><button id="reimport" title="Modell aus den Räumen der Bestandsaufnahme neu erzeugen">Neu übernehmen</button></div>
       <p class="msg small" id="saveinfo"></p>
     </section>
   </aside>
 </main>
 <dialog id="dlg"><p id="dlg-t"></p><div class="bar" style="justify-content:flex-end"><button id="dlg-no">Abbrechen</button><button class="pri" id="dlg-yes">Übernehmen</button></div></dialog>
 <script>/*CORE*/</script>
+<script>/*IFC*/</script>
 <script>
 {
 const $ = id => document.getElementById(id);
@@ -128,6 +129,7 @@ async function init() {
     const [sp, sm] = await Promise.race([Promise.all([db.collection('projekte').get(), db.collection('modell').get()]), tm]);
     sp.docs.forEach(d => { const x = d.data(); if (x && x.id && Array.isArray(x.geschosse)) st.projects[x.id] = x; });
     sm.docs.forEach(d => { const x = d.data(); if (x && x.id) st.models[x.id] = x; });
+    try { const fs = await db.doc('einstellungen/firma').get(); if (fs.exists) st.firma = (fs.data() || {}).firma || {}; } catch (e) { /* ohne Einstellungen weiter */ }
     setSync('Verbunden', 'ok');
   } catch (e) { setSync('Datenbank nicht erreichbar: ' + e.message, 'warn'); }
   const ids = Object.keys(st.projects).sort((a, b) => (a === 'beispiel' ? -1 : b === 'beispiel' ? 1 : (st.projects[b].geaendert || 0) - (st.projects[a].geaendert || 0)));
@@ -163,9 +165,30 @@ function change(fn) {
 const metaOf = r => ({ name: r.name, nutzung: r.nutzung, temp: r.temp, beheizt: r.beheizt, bestandsaufnahmeId: r.bestandsaufnahmeId, mitte: r.mitte, soll: (fl().meta.find(m => m.bestandsaufnahmeId && m.bestandsaufnahmeId === r.bestandsaufnahmeId) || {}).soll ?? null });
 function undoRedo(from, to) { const e = from.pop(); if (!e) return; const f = st.floors.find(x => x.id === e.fid); if (!f) return; to.push({ fid: f.id, s: JSON.stringify({ g: f.g, meta: f.meta }) }); const o = JSON.parse(e.s); f.g = o.g; f.meta = o.meta; if (st.fid !== f.id) selectFloor(f.id); st.sel = null; st.dirty = true; scheduleSave(); refresh(); }
 function scheduleSave() { if (!st.db) return; clearTimeout(st.saveTimer); setSync('Ungespeichert', 'warn'); st.saveTimer = setTimeout(save, 1500); }
+function modelDoc() { const p = st.projects[st.pid]; return { id: p.id, projektName: p.name || '', version: MODEL_VERSION, quelle: 'Gebäudemodell', geaendert: Date.now(), geschosse: st.floors.map(f => { const rs = GM.roomsWithMeta(f.g, f.meta), bf = p.geschosse.find(x => x.id === f.id) || {}; return { id: f.id, name: f.name, geschossHoehe_mm: f.h, lichteHoehe_mm: bf.hoehe ? Math.round(bf.hoehe * 1000) : null, knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen, raeume: rs.map(r => ({ ...metaOf(r), flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur })) }; }) }; }
+/* IFC: in den Übergabeordner der Bestandsaufnahme schreiben (Dateiserver der Claude-App), sonst als Download */
+async function exportIfc() {
+  const p = st.projects[st.pid]; if (!p) return; const info = $('saveinfo'), F = st.firma || {};
+  const name = (String(p.name || p.id).replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim().replace(/\s+/g, '_') || 'Projekt') + '_Gebaeudemodell.ifc';
+  let txt; try { txt = GMIFC.exportIFC(modelDoc(), { bearbeiter: F.bearbeiter || '', organisation: F.marke || 'cL-energiePlan', nord: (p.objekt || {}).nord || 0 }); } catch (e) { info.textContent = 'IFC konnte nicht erzeugt werden: ' + e.message; return; }
+  $('ifc').disabled = true; info.textContent = 'IFC wird übergeben …';
+  try {
+    const mcp = await window.claude.use('mcp'); if (!mcp) throw new Error('kein Dateiserver');
+    let dir = (F.scOrdner || '').trim();
+    if (!dir) { const r = await mcp.callTool('host:filesystem', 'list_allowed_directories', {}); const txt2 = [r.payload, r.structuredContent, (r.content || []).map(b => b && b.text)].flat(3).filter(x => typeof x === 'string').join('\n'); dir = txt2.split(/\r?\n/).map(x => x.trim()).find(x => /^([A-Za-z]:[\\/]|\/)/.test(x)) || ''; }
+    if (!dir) throw new Error('kein Übergabeordner');
+    const path = dir.replace(/[\\/]+$/, '') + (dir.includes('\\') ? '\\' : '/') + name;
+    await mcp.callTool('host:filesystem', 'write_file', { path, content: txt }, { cache: false });
+    info.textContent = 'IFC liegt im Übergabeordner: ' + path;
+  } catch (e) {
+    try { const dl = await window.claude.use('downloads'); if (!dl) throw e; await dl.save({ filename: name, data: new Blob([txt], { type: 'application/x-step' }) }); info.textContent = 'IFC als Download angeboten: ' + name + ' (Übergabeordner nicht erreichbar: ' + (e.message || e) + ').'; }
+    catch (e2) { info.textContent = 'IFC-Übergabe nicht möglich: ' + ((e2 && (e2.message || e2.code)) || e2) + '.'; }
+  }
+  $('ifc').disabled = false;
+}
 async function save() {
   const p = st.projects[st.pid]; if (!st.db || !p) return; clearTimeout(st.saveTimer); setSync('Speichert …');
-  const doc = { id: p.id, projektName: p.name || '', version: MODEL_VERSION, quelle: 'Gebäudemodell', geaendert: Date.now(), geschosse: st.floors.map(f => { const rs = GM.roomsWithMeta(f.g, f.meta); return { id: f.id, name: f.name, geschossHoehe_mm: f.h, knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen, raeume: rs.map(r => ({ ...metaOf(r), flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur })) }; }) };
+  const doc = modelDoc();
   try { if (JSON.stringify(doc).length > 240000) throw new Error('Modell zu groß für ein Dokument'); await st.db.doc('modell/' + p.id).set(doc); st.models[p.id] = doc; st.dirty = false; setSync('Gespeichert', 'ok'); $('saveinfo').textContent = 'Gespeichert unter modell/' + p.id + ' um ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + '.'; }
   catch (e) { setSync('Speichern fehlgeschlagen', 'warn'); $('saveinfo').textContent = 'Speichern fehlgeschlagen: ' + e.message; }
 }
@@ -368,7 +391,7 @@ document.querySelectorAll('#wallbar [data-dir]').forEach(b => b.addEventListener
 $('w-len').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); placeByLength(null); } });
 $('w-done').addEventListener('click', () => endChain(false));
 $('o-typ').addEventListener('change', e => { const d = { fenster: ['1,20', '1,40', '0,90'], fenstertuer: ['1,00', '2,10', '0,00'], innentuer: ['0,885', '2,01', '0,00'], aussentuer: ['1,01', '2,135', '0,00'] }[e.target.value]; $('o-b').value = d[0]; $('o-h').value = d[1]; $('o-brh').value = d[2]; });
-$('save').addEventListener('click', save);
+$('save').addEventListener('click', save); $('ifc').addEventListener('click', exportIfc);
 $('reimport').addEventListener('click', async () => { if (!(await confirmBox('Das Modell dieses Projekts wird aus den Räumen der Bestandsaufnahme neu erzeugt. Eigene Änderungen am Modell gehen verloren.'))) return; st.floors = fromBA(st.projects[st.pid]); st.undo = []; st.redo = []; st.sel = null; st.dirty = true; scheduleSave(); refresh(true); });
 document.addEventListener('keydown', e => {
   const inField = /INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName);

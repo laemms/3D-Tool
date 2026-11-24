@@ -1,0 +1,123 @@
+/* Gebäudemodell – IFC-2x3-Export aus dem Wandgraph (Phase A)
+   Koordinaten: Wandgraph in mm mit y nach unten → IFC in Metern mit y nach oben (y wird gespiegelt).
+   Wandstöße: an L-Ecken läuft eine Wand durch (Außenwand bzw. längere), die andere stößt stumpf an deren Fläche;
+   an T-Stößen läuft die gerade Wand durch, die abzweigende endet an deren naher Fläche. So gibt es weder Lücken
+   noch Überschneidungen, und Raumtool 3D bekommt geschlossene Wandflächen. */
+(function (root) {
+  'use strict';
+  const GM = root.GM || (typeof require !== 'undefined' ? require('./core.js') : null);
+
+  /* stabile IFC-GUIDs (22 Zeichen) aus Projekt-, Geschoss- und Element-Kennung */
+  const GC = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$';
+  function guid(key) {
+    let h1 = 0x811c9dc5, h2 = 0x01000193, h3 = 0x9e3779b9, h4 = 0x85ebca6b;
+    for (let i = 0; i < key.length; i++) { const c = key.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619); h2 = Math.imul(h2 + c, 2654435761); h3 = Math.imul(h3 ^ (c << 3), 2246822507); h4 = Math.imul(h4 + (c * 31), 3266489909); }
+    const bits = [h1, h2, h3, h4].map(x => (x >>> 0).toString(2).padStart(32, '0')).join('').slice(0, 128);
+    let s = GC[parseInt(bits.slice(0, 2), 2)]; for (let i = 2; i < 128; i += 6) s += GC[parseInt(bits.slice(i, i + 6), 2)];
+    return "'" + s + "'";
+  }
+
+  /* Verlängerung (+) bzw. Kürzung (−) jedes Wandendes in mm */
+  function wallEnds(g) {
+    const N = new Map(g.knoten.map(n => [n.id, n])), at = new Map(), ext = new Map();
+    g.waende.forEach(w => { for (const id of [w.a, w.b]) { if (!at.has(id)) at.set(id, []); at.get(id).push(w); } ext.set(w.id, { a: 0, b: 0 }); });
+    const dirFrom = (w, id) => { const n = N.get(id), o = N.get(w.a === id ? w.b : w.a), d = [o.x - n.x, o.y - n.y], L = Math.hypot(d[0], d[1]) || 1; return [d[0] / L, d[1] / L]; };
+    // Eckpunkte des Wandkörpers am Knoten, relativ zum Knoten
+    const corners = (w, id) => { const u = dirFrom(w, id), S = [-u[1], u[0]], ts0 = w.ts == null ? w.t / 2 : w.ts, ts = w.a === id ? ts0 : w.t - ts0; return [[S[0] * ts, S[1] * ts], [-S[0] * (w.t - ts), -S[1] * (w.t - ts)]]; };
+    const proj = (w, id, other) => { const u = dirFrom(w, id), out = [-u[0], -u[1]]; return corners(other, id).map(c => c[0] * out[0] + c[1] * out[1]); };
+    const set = (w, id, v) => { ext.get(w.id)[w.a === id ? 'a' : 'b'] = v; };
+    for (const [id, ws] of at) {
+      if (ws.length < 2) continue;
+      const col = (p, q) => { const a = dirFrom(p, id), b = dirFrom(q, id); return a[0] * b[0] + a[1] * b[1] < -0.999; };
+      if (ws.length === 2) {
+        const [p, q] = ws; if (col(p, q)) continue;
+        const lp = Math.hypot(...['x', 'y'].map(k => N.get(p.a)[k] - N.get(p.b)[k])), lq = Math.hypot(...['x', 'y'].map(k => N.get(q.a)[k] - N.get(q.b)[k]));
+        const run = (p.ext !== q.ext ? (p.ext ? p : q) : (lp >= lq ? p : q)), stop = run === p ? q : p;
+        set(run, id, Math.max(0, ...proj(run, id, stop))); set(stop, id, Math.min(0, ...proj(stop, id, run)));
+        continue;
+      }
+      // drei und mehr: durchlaufende Paare bleiben, Abzweige enden an der nahen Fläche der dicksten durchlaufenden Wand
+      const through = new Set(); ws.forEach(p => ws.forEach(q => { if (p !== q && col(p, q)) { through.add(p); through.add(q); } }));
+      if (!through.size) continue;
+      const main = [...through].reduce((a, b) => (b.t > a.t ? b : a));
+      ws.filter(w => !through.has(w)).forEach(w => set(w, id, Math.min(0, ...proj(w, id, main))));
+    }
+    return ext;
+  }
+
+  function exportIFC(model, opts = {}) {
+    const L = []; let n = 0; const E = s => { L.push('#' + (++n) + '=' + s + ';'); return '#' + n; };
+    const R = v => { const x = Math.round((v || 0) * 1e6) / 1e6, s = String(x); return /[.e]/.test(s) ? s : s + '.'; };
+    const M = v => R(v / 1000); // mm → m
+    const S = t => "'" + String(t == null ? '' : t).replace(/\\/g, '\\\\').replace(/'/g, "''").replace(/[^\x20-\x7e]/g, c => '\\X2\\' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + '\\X0\\') + "'";
+    const pid = model.id || 'projekt', G = k => guid(pid + '|' + k);
+    const P2 = (x, y) => E(`IFCCARTESIANPOINT((${R(x)},${R(y)}))`), P3 = (x, y, z) => E(`IFCCARTESIANPOINT((${R(x)},${R(y)},${R(z)}))`), D3 = (x, y, z) => E(`IFCDIRECTION((${R(x)},${R(y)},${R(z)}))`);
+    const org = E(`IFCORGANIZATION($,${S(opts.organisation || 'cL-energiePlan')},$,$,$)`), per = E(`IFCPERSON($,${S(opts.bearbeiter || '')},$,$,$,$,$,$)`), po = E(`IFCPERSONANDORGANIZATION(${per},${org},$)`);
+    const app = E(`IFCAPPLICATION(${org},'A','Gebaeudemodell','GM')`), oh = E(`IFCOWNERHISTORY(${po},${app},$,.ADDED.,$,$,$,${Math.floor((opts.zeit || Date.now()) / 1000)})`);
+    const un = E(`IFCUNITASSIGNMENT((${[['LENGTHUNIT', 'METRE'], ['AREAUNIT', 'SQUARE_METRE'], ['VOLUMEUNIT', 'CUBIC_METRE'], ['PLANEANGLEUNIT', 'RADIAN'], ['THERMODYNAMICTEMPERATUREUNIT', 'DEGREE_CELSIUS']].map(u => E(`IFCSIUNIT(*,.${u[0]}.,$,.${u[1]}.)`)).join(',')}))`);
+    const zd = D3(0, 0, 1), xd = D3(1, 0, 0), na = (Number(opts.nord) || 0) * Math.PI / 180;
+    const ctx = E(`IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,${E(`IFCAXIS2PLACEMENT3D(${P3(0, 0, 0)},${zd},${xd})`)},${E(`IFCDIRECTION((${R(Math.sin(na))},${R(Math.cos(na))}))`)})`);
+    const LP = (rel, x, y, z, dx, dy) => E(`IFCLOCALPLACEMENT(${rel || '$'},${E(`IFCAXIS2PLACEMENT3D(${P3(x, y, z)},${zd},${dx == null ? xd : D3(dx, dy, 0)})`)})`);
+    const poly2 = q => { const pl = q.map(c => P2(c[0], c[1])); pl.push(pl[0]); return E(`IFCPOLYLINE((${pl.join(',')}))`); };
+    const EX = (q, h, z0) => E(`IFCEXTRUDEDAREASOLID(${E(`IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,${poly2(q)})`)},${E(`IFCAXIS2PLACEMENT3D(${P3(0, 0, z0 || 0)},${zd},${xd})`)},${zd},${R(h)})`);
+    const SH = (body, axis) => E(`IFCPRODUCTDEFINITIONSHAPE($,$,(${(axis ? axis + ',' : '') + E(`IFCSHAPEREPRESENTATION(${ctx},'Body','SweptSolid',(${body}))`)}))`);
+    const PS = (obj, name, props, key) => { const ps = props.filter(x => x[2] != null).map(x => E(`IFCPROPERTYSINGLEVALUE(${S(x[0])},$,${x[1]}(${x[2]}),$)`)); if (ps.length) E(`IFCRELDEFINESBYPROPERTIES(${G('rd|' + key)},${oh},$,$,(${obj}),${E(`IFCPROPERTYSET(${G('ps|' + key)},${oh},${S(name)},$,(${ps.join(',')}))`)})`); };
+    const B = v => (v ? '.T.' : '.F.'), AG = (par, ch, key) => { if (ch.length) E(`IFCRELAGGREGATES(${G('ag|' + key)},${oh},$,$,${par},(${ch.join(',')}))`); };
+    const ccw = q => (GM.signedArea(q) < 0 ? q.slice().reverse() : q), W = c => [c[0] / 1000, -c[1] / 1000];
+
+    const proj = E(`IFCPROJECT(${G('projekt')},${oh},${S(model.projektName || pid)},$,$,$,$,(${ctx}),${un})`), lp0 = LP(null, 0, 0, 0);
+    const site = E(`IFCSITE(${G('site')},${oh},${S('Grundstück')},$,$,${lp0},$,$,.ELEMENT.,$,$,$,$,$)`), lpB = LP(lp0, 0, 0, 0), bld = E(`IFCBUILDING(${G('building')},${oh},${S(model.projektName || pid)},$,$,${lpB},$,$,.ELEMENT.,$,$,$)`);
+    AG(proj, [site], 'p'); AG(site, [bld], 's');
+
+    // Geschosshöhen: Bezug Erdgeschoss = 0, darunter negativ
+    const fs = model.geschosse || [], iEG = Math.max(0, fs.findIndex(f => /^(eg|erd)/i.test(f.name || ''))), elev = []; let z = 0;
+    for (let i = iEG; i < fs.length; i++) { elev[i] = z; z += fs[i].geschossHoehe_mm || 2800; }
+    z = 0; for (let i = iEG - 1; i >= 0; i--) { z -= fs[i].geschossHoehe_mm || 2800; elev[i] = z; }
+    const storeys = [], mat = {}, matOf = (t, sense, off) => { const k = t + '|' + sense + '|' + off; if (!mat[k]) mat[k] = E(`IFCMATERIALLAYERSETUSAGE(${E(`IFCMATERIALLAYERSET((${E(`IFCMATERIALLAYER(${E(`IFCMATERIAL(${S('Wand ' + R(t / 10) + ' cm')})`)},${M(t)},$)`)}),${S('Wand ' + R(t / 10) + ' cm')})`)},.AXIS2.,.${sense}.,${M(off)})`); return mat[k]; }, matRel = new Map();
+    let raumNr = 0;
+    fs.forEach((f, fi) => {
+      const g = { knoten: f.knoten || [], waende: f.waende || [], oeffnungen: f.oeffnungen || [] }, N = new Map(g.knoten.map(k => [k.id, k])), H = f.geschossHoehe_mm || 2800, lichte = f.lichteHoehe_mm || H - 300;
+      const lpS = LP(lpB, 0, 0, elev[fi] / 1000), st = E(`IFCBUILDINGSTOREY(${G('st|' + f.id)},${oh},${S(f.name || 'Geschoss')},$,$,${lpS},$,$,.ELEMENT.,${M(elev[fi])})`); storeys.push(st);
+      const els = [], sp = [], ends = wallEnds(g);
+      for (const w of g.waende) {
+        const a = N.get(w.a), b = N.get(w.b); if (!a || !b) continue;
+        const ea = ends.get(w.id).a, eb = ends.get(w.id).b, A = W([a.x, a.y]), Bp = W([b.x, b.y]), dx = Bp[0] - A[0], dy = Bp[1] - A[1], Lm = Math.hypot(dx, dy); if (Lm < 0.01) continue;
+        const ux = dx / Lm, uy = dy / Lm, ts = (w.ts == null ? w.t / 2 : w.ts), x0 = -ea / 1000, x1 = Lm + eb / 1000;
+        // im Bildschirm liegt die S-Seite rechts der Laufrichtung; nach dem Spiegeln von y ist das lokal −Y
+        const yS = -ts / 1000, yO = (w.t - ts) / 1000, lp = LP(lpS, A[0], A[1], 0, ux, uy);
+        const axis = E(`IFCSHAPEREPRESENTATION(${ctx},'Axis','Curve2D',(${E(`IFCPOLYLINE((${P2(0, 0)},${P2(Lm, 0)}))`)}))`);
+        const wall = E(`IFCWALLSTANDARDCASE(${G('w|' + f.id + '|' + w.id)},${oh},${S((w.ext ? 'Außenwand ' : 'Innenwand ') + R(w.t / 10) + ' cm')},$,$,${lp},${SH(EX([[x0, yS], [x1, yS], [x1, yO], [x0, yO]], H / 1000, 0), axis)},$)`);
+        els.push(wall);
+        const mu = matOf(w.t, 'POSITIVE', -ts); if (!matRel.has(mu)) matRel.set(mu, []); matRel.get(mu).push(wall);
+        PS(wall, 'Pset_WallCommon', [['IsExternal', 'IFCBOOLEAN', B(w.ext)], ['LoadBearing', 'IFCBOOLEAN', B(w.ext)]], 'wc|' + f.id + '|' + w.id);
+        for (const o of g.oeffnungen.filter(x => x.wand === w.id)) {
+          const tuer = /tuer/.test(o.typ || ''), xa = o.abstand / 1000, wb = o.breite / 1000, zb = (o.brh || 0) / 1000, hh = o.hoehe / 1000, key = f.id + '|' + o.id;
+          const op = E(`IFCOPENINGELEMENT(${G('op|' + key)},${oh},${S('Öffnung')},$,$,${LP(lp, 0, 0, 0)},${SH(EX([[xa, yS - 0.01], [xa + wb, yS - 0.01], [xa + wb, yO + 0.01], [xa, yO + 0.01]], hh, zb))},$)`);
+          E(`IFCRELVOIDSELEMENT(${G('rv|' + key)},${oh},$,$,${wall},${op})`);
+          const name = { fenster: 'Fenster', fenstertuer: 'Fenstertür', innentuer: 'Innentür', aussentuer: 'Außentür' }[o.typ] || 'Öffnung';
+          const fp = LP(lp, xa, yS + (w.t / 2000), zb), fill = tuer
+            ? E(`IFCDOOR(${G('fi|' + key)},${oh},${S(name)},$,$,${fp},${SH(EX([[0, -0.03], [wb, -0.03], [wb, 0.03], [0, 0.03]], hh, 0))},$,${R(hh)},${R(wb)})`)
+            : E(`IFCWINDOW(${G('fi|' + key)},${oh},${S(name)},$,$,${fp},${SH(EX([[0, -0.03], [wb, -0.03], [wb, 0.03], [0, 0.03]], hh, 0))},$,${R(hh)},${R(wb)})`);
+          E(`IFCRELFILLSELEMENT(${G('rf|' + key)},${oh},$,$,${op},${fill})`); els.push(fill);
+          PS(fill, tuer ? 'Pset_DoorCommon' : 'Pset_WindowCommon', [['IsExternal', 'IFCBOOLEAN', B(o.typ !== 'innentuer')]], 'fc|' + key);
+        }
+      }
+      for (const r of GM.roomsWithMeta(g, f.raeume || [])) {
+        raumNr++; const q = ccw(r.kontur.map(W)), key = f.id + '|' + raumNr;
+        const s = E(`IFCSPACE(${G('sp|' + f.id + '|' + (r.bestandsaufnahmeId || r.mitte.join(',')))},${oh},${S(String(raumNr).padStart(2, '0'))},${S(r.nutzung || '')},$,${LP(lpS, 0, 0, 0)},${SH(EX(q, lichte / 1000, 0))},${S(r.name + (r.beheizt === 'nein' ? ' (unbeheizt)' : r.temp != null ? ' (' + String(r.temp).replace('.', ',') + ' °C)' : ''))},.ELEMENT.,.INTERNAL.,$)`);
+        sp.push(s);
+        PS(s, 'Pset_SpaceThermalDesign', [['HeatingDryBulb', 'IFCTHERMODYNAMICTEMPERATUREMEASURE', r.beheizt === 'nein' || r.temp == null ? null : R(r.temp)]], 'td|' + key);
+        PS(s, 'Gebaeudemodell', [['Raumnummer', 'IFCINTEGER', raumNr], ['Flaeche', 'IFCAREAMEASURE', R(Math.round(r.flaeche_m2 * 100) / 100)], ['LichteHoehe', 'IFCLENGTHMEASURE', M(lichte)], ['Beheizt', 'IFCBOOLEAN', B(r.beheizt !== 'nein')]], 'gm|' + key);
+      }
+      AG(st, sp, 'sp|' + f.id);
+      if (els.length) E(`IFCRELCONTAINEDINSPATIALSTRUCTURE(${G('cs|' + f.id)},${oh},$,$,(${els.join(',')}),${st})`);
+    });
+    AG(bld, storeys, 'b');
+    let mi = 0; for (const [mu, ws] of matRel) E(`IFCRELASSOCIATESMATERIAL(${G('am|' + (++mi))},${oh},$,$,(${ws.join(',')}),${mu})`);
+    const now = new Date(opts.zeit || Date.now()).toISOString().slice(0, 19);
+    return ['ISO-10303-21;', 'HEADER;', "FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');", `FILE_NAME(${S((model.projektName || pid) + '.ifc')},'${now}',(${S(opts.bearbeiter || '')}),(${S(opts.organisation || 'cL-energiePlan')}),'Gebaeudemodell','Gebaeudemodell','');`, "FILE_SCHEMA(('IFC2X3'));", 'ENDSEC;', 'DATA;', ...L, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\r\n');
+  }
+
+  const api = { exportIFC, wallEnds, guid };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GMIFC = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

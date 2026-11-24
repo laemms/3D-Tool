@@ -2,10 +2,12 @@
 import json, re
 from playwright.sync_api import sync_playwright
 fx = open('/home/claude/3d-tool/fixtures/beispiel.json').read()
-mock = """
+mock = r"""
 window.__saved=[];
 const FX=%s;
-window.claude={use:async n=>{ if(n!=='db') return null; return {
+window.__files=[];
+window.claude={use:async n=>{ if(n==='mcp') return {callTool:async(srv,tool,args)=>{ if(tool==='list_allowed_directories') return {content:[{type:'text',text:'Allowed directories:\nC:\\Users\\Chris\\Documents\\Bestandsaufnahme-Export'}]}; window.__files.push([srv,tool,args.path,args.content.length,args.content.slice(0,40)]); return {}; }};
+  if(n!=='db') return null; return {
   collection:c=>({get:async()=>({docs:c==='projekte'?[{data:()=>FX}]:[]})}),
   doc:p=>({set:async d=>{window.__saved.push([p,JSON.parse(JSON.stringify(d))]);}, get:async()=>({exists:false})})
 };}};
@@ -49,6 +51,8 @@ with sync_playwright() as pw:
     pg.wait_for_timeout(1800); saved = pg.evaluate('window.__saved'); last = saved[-1][1]
     kg = [g for g in last['geschosse'] if g['name'] == 'KG'][0]
     print('Gespeichert:', saved[-1][0], 'Version', last['version'], 'KG Räume', [(x['name'], x['flaeche_m2']) for x in kg['raeume']], 'Öffnungen', len(kg['oeffnungen']))
+    pg.click('#ifc'); pg.wait_for_timeout(500); print('IFC:', pg.inner_text('#saveinfo'), pg.evaluate('window.__files'))
+    assert pg.evaluate('window.__files.length') == 1
     pg.click('#v3d'); pg.wait_for_timeout(1000); pg.screenshot(path='/tmp/gm_3d.png')
     pg.set_viewport_size({'width':390,'height':844}); pg.click('#v2d'); pg.wait_for_timeout(300); pg.screenshot(path='/tmp/gm_phone.png', full_page=True)
     print('Fehler:', errs); b.close()

@@ -101,7 +101,7 @@
   }
 
   function rooms(g) {
-    return faces(g).map((f, i) => { const q = innerContour(f, g); return { id: 'f' + (i + 1), achse: f.poly, kontur: q.map(p => [Math.round(p[0]), Math.round(p[1])]), flaeche_m2: Math.abs(signedArea(q)) / 1e6, waende: [...new Set(f.halbkanten.map(h => h.w.id))] }; });
+    return faces(g).map((f, i) => { const q = innerContour(f, g); return { id: 'f' + (i + 1), achse: f.poly, kontur: q.map(p => [Math.round(p[0] * 2) / 2, Math.round(p[1] * 2) / 2]), flaeche_m2: Math.abs(signedArea(q)) / 1e6, waende: [...new Set(f.halbkanten.map(h => h.w.id))] }; });
   }
 
   /* ---------- Umrechnung: raumbasierter Grundriss (Bestandsaufnahme-Tool) → Wandgraph ---------- */
