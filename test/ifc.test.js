@@ -36,7 +36,10 @@ function check(f, strict) {
   console.log('ok  Höhen: Niveau, Raumhöhe, Decke und Bodenplatte');
   const w0 = o.waende.find(w => w.ext && !GM.isHilf(w)), t3 = exportIFC({ id: 't', geschosse: [{ ...o, oeffnungen: [{ id: 'f1', wand: w0.id, typ: 'fenstertuer', abstand: 100, breite: 1000, hoehe: 2100, brh: 0 }, { id: 'f2', wand: w0.id, typ: 'aussentuer', abstand: 1300, breite: 900, hoehe: 2000, brh: 0 }] }] });
   assert.strictEqual(n(t3, /IFCWINDOW\(/g), 1, 'Fenstertür als Fenster'); assert.strictEqual(n(t3, /IFCDOOR\(/g), 1);
-  console.log('ok  Fenstertür als IfcWindow'); }
+  console.log('ok  Fenstertür als IfcWindow');
+  const t4 = exportIFC({ id: 't', geschosse: [{ ...o, oeffnungen: [{ id: 'd', wand: w0.id, typ: 'innentuer', abstand: -1000, breite: 885, hoehe: 2010, brh: 0 }] }] });
+  assert.ok(!/IFCCARTESIANPOINT\(\(-1\.,/.test(t4) && /IFCOPENINGELEMENT/.test(t4), 'Öffnung beginnt vor der Wand');
+  console.log('ok  Öffnung bleibt im Wandkörper'); }
 { const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');

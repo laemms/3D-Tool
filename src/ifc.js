@@ -103,7 +103,7 @@
         const mu = matOf(w.t, 'POSITIVE', -ts); if (!matRel.has(mu)) matRel.set(mu, []); matRel.get(mu).push(wall);
         PS(wall, 'Pset_WallCommon', [['IsExternal', 'IFCBOOLEAN', B(w.ext)], ['LoadBearing', 'IFCBOOLEAN', B(w.ext)]], 'wc|' + f.id + '|' + w.id);
         for (const o of g.oeffnungen.filter(x => x.wand === w.id)) {
-          const tuer = o.typ === 'innentuer' || o.typ === 'aussentuer' /* Fenstertür als Fenster: Raumtool 3D führt sie dann als Fenster */, xa = o.abstand / 1000, wb = o.breite / 1000, zb = (o.brh || 0) / 1000, hh = o.hoehe / 1000, key = f.id + '|' + o.id;
+          const tuer = o.typ === 'innentuer' || o.typ === 'aussentuer' /* Fenstertür als Fenster: Raumtool 3D führt sie dann als Fenster */, wb = Math.min(o.breite / 1000, Math.max(0.2, x1 - x0 - 0.02)), xa = Math.max(x0 + 0.01, Math.min(x1 - wb - 0.01, o.abstand / 1000)) /* im Wandkörper halten: Wandenden sind an Stößen gekürzt */, zb = (o.brh || 0) / 1000, hh = o.hoehe / 1000, key = f.id + '|' + o.id;
           const op = E(`IFCOPENINGELEMENT(${G('op|' + key)},${oh},${S('Öffnung')},$,$,${LP(lp, 0, 0, 0)},${SH(EX([[xa, yS - 0.01], [xa + wb, yS - 0.01], [xa + wb, yO + 0.01], [xa, yO + 0.01]], hh, zb))},$)`);
           E(`IFCRELVOIDSELEMENT(${G('rv|' + key)},${oh},$,$,${wall},${op})`);
           const name = { fenster: 'Fenster', fenstertuer: 'Fenstertür', innentuer: 'Innentür', aussentuer: 'Außentür' }[o.typ] || 'Öffnung';
