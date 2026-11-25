@@ -58,6 +58,7 @@
     const L = []; let n = 0; const E = s => { L.push('#' + (++n) + '=' + s + ';'); return '#' + n; };
     const R = v => { const x = Math.round((v || 0) * 1e6) / 1e6, s = String(x); return /[.e]/.test(s) ? s : s + '.'; };
     const M = v => R(v / 1000); // mm → m
+    const CM = mm => String(Math.round(mm) / 10).replace('.', ','); // Beschriftung in cm, z. B. 36,5
     const S = t => "'" + String(t == null ? '' : t).replace(/\\/g, '\\\\').replace(/'/g, "''").replace(/[^\x20-\x7e]/g, c => '\\X2\\' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + '\\X0\\') + "'";
     const pid = model.id || 'projekt', G = k => guid(pid + '|' + k);
     const P2 = (x, y) => E(`IFCCARTESIANPOINT((${R(x)},${R(y)}))`), P3 = (x, y, z) => E(`IFCCARTESIANPOINT((${R(x)},${R(y)},${R(z)}))`), D3 = (x, y, z) => E(`IFCDIRECTION((${R(x)},${R(y)},${R(z)}))`);
@@ -83,7 +84,7 @@
     for (let i = iEG; i < fs.length; i++) { elev[i] = z; z += fs[i].geschossHoehe_mm || 2800; }
     z = 0; for (let i = iEG - 1; i >= 0; i--) { z -= fs[i].geschossHoehe_mm || 2800; elev[i] = z; }
     fs.forEach((f, i) => { if (f.niveau_mm != null) elev[i] = f.niveau_mm; }); // Höhenmodell der Bestandsaufnahme (OKFF)
-    const storeys = [], mat = {}, matOf = (t, sense, off) => { const k = t + '|' + sense + '|' + off; if (!mat[k]) mat[k] = E(`IFCMATERIALLAYERSETUSAGE(${E(`IFCMATERIALLAYERSET((${E(`IFCMATERIALLAYER(${E(`IFCMATERIAL(${S('Wand ' + R(t / 10) + ' cm')})`)},${M(t)},$)`)}),${S('Wand ' + R(t / 10) + ' cm')})`)},.AXIS2.,.${sense}.,${M(off)})`); return mat[k]; }, matRel = new Map();
+    const storeys = [], mat = {}, matOf = (t, sense, off) => { const k = t + '|' + sense + '|' + off; if (!mat[k]) mat[k] = E(`IFCMATERIALLAYERSETUSAGE(${E(`IFCMATERIALLAYERSET((${E(`IFCMATERIALLAYER(${E(`IFCMATERIAL(${S('Wand ' + CM(t) + ' cm')})`)},${M(t)},$)`)}),${S('Wand ' + CM(t) + ' cm')})`)},.AXIS2.,.${sense}.,${M(off)})`); return mat[k]; }, matRel = new Map();
     let raumNr = 0;
     fs.forEach((f, fi) => {
       const g = { knoten: f.knoten || [], waende: f.waende || [], oeffnungen: f.oeffnungen || [] }, N = new Map(g.knoten.map(k => [k.id, k])), H = f.geschossHoehe_mm || 2800, lichte = f.lichteHoehe_mm || H - 300;
@@ -97,7 +98,7 @@
         // im Bildschirm liegt die S-Seite rechts der Laufrichtung; nach dem Spiegeln von y ist das lokal −Y
         const yS = -ts / 1000, yO = (w.t - ts) / 1000, lp = LP(lpS, A[0], A[1], 0, ux, uy);
         const axis = E(`IFCSHAPEREPRESENTATION(${ctx},'Axis','Curve2D',(${E(`IFCPOLYLINE((${P2(0, 0)},${P2(Lm, 0)}))`)}))`);
-        const wall = E(`IFCWALLSTANDARDCASE(${G('w|' + f.id + '|' + w.id)},${oh},${S((w.ext ? 'Außenwand ' : 'Innenwand ') + R(w.t / 10) + ' cm')},$,$,${lp},${SH(EX([[x0, yS], [x1, yS], [x1, yO], [x0, yO]], H / 1000, 0), axis)},$)`);
+        const wall = E(`IFCWALLSTANDARDCASE(${G('w|' + f.id + '|' + w.id)},${oh},${S((w.ext ? 'Außenwand ' : 'Innenwand ') + CM(w.t) + ' cm')},$,$,${lp},${SH(EX([[x0, yS], [x1, yS], [x1, yO], [x0, yO]], H / 1000, 0), axis)},$)`);
         els.push(wall);
         const mu = matOf(w.t, 'POSITIVE', -ts); if (!matRel.has(mu)) matRel.set(mu, []); matRel.get(mu).push(wall);
         PS(wall, 'Pset_WallCommon', [['IsExternal', 'IFCBOOLEAN', B(w.ext)], ['LoadBearing', 'IFCBOOLEAN', B(w.ext)]], 'wc|' + f.id + '|' + w.id);
@@ -143,11 +144,11 @@
       // Rohdecke über dem Geschoss (bzw. oberste Geschossdecke) und Bodenplatte unter dem untersten Geschoss
       const um = f.umriss || GM.umriss(g), rd = f.rohdecke_mm;
       if (um.length >= 3 && rd > 0) {
-        const q = ccw(um.map(W)), sl = E(`IFCSLAB(${G('sl|' + f.id)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + R(rd / 10) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, rd / 1000, (H - rd) / 1000))},$,.FLOOR.)`);
+        const q = ccw(um.map(W)), sl = E(`IFCSLAB(${G('sl|' + f.id)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, rd / 1000, (H - rd) / 1000))},$,.FLOOR.)`);
         els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id);
       }
       if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) {
-        const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + f.id)},${oh},${S('Bodenplatte ' + R(bp / 10) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);
+        const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + f.id)},${oh},${S('Bodenplatte ' + CM(bp) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);
         els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'bpc|' + f.id);
       }
       AG(st, sp, 'sp|' + f.id);
