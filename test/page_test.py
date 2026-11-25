@@ -52,7 +52,7 @@ with sync_playwright() as pw:
     kg = [g for g in last['geschosse'] if g['name'] == 'KG'][0]
     print('Gespeichert:', saved[-1][0], 'Version', last['version'], 'KG Räume', [(x['name'], x['flaeche_m2']) for x in kg['raeume']], 'Öffnungen', len(kg['oeffnungen']))
     pg.click('#ifc'); pg.wait_for_timeout(500); print('IFC:', pg.inner_text('#saveinfo'), pg.evaluate('window.__files'))
-    assert pg.evaluate('window.__files.length') == 1
+    assert pg.evaluate('window.__files.length') == 2 and pg.evaluate('window.__files[1][2]').endswith('_Gebaeudemodell.json')
     pg.click('#v3d'); pg.wait_for_timeout(1000); pg.screenshot(path='/tmp/gm_3d.png')
     pg.set_viewport_size({'width':390,'height':844}); pg.click('#v2d'); pg.wait_for_timeout(300); pg.screenshot(path='/tmp/gm_phone.png', full_page=True)
     print('Fehler:', errs); b.close()

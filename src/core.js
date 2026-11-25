@@ -316,6 +316,28 @@
     return out;
   }
 
-  const api = { stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  /* ---- Modell aus Bestandsaufnahme und gespeichertem Stand (gemeinsam für Seite und Werkzeuge) ---- */
+  function floorsFromBA(p) {
+    return p.geschosse.map(f => { const r = fromBestandsaufnahme(p, f), g = r.graph; g.waende.forEach(w => delete w.src);
+      const meta = r.raeume.map(x => { const q = x.bestandsaufnahme; return { name: q ? q.name : 'Raum', nutzung: q ? q.nutzung || '' : '', temp: q ? q.temp : null, beheizt: q ? q.beheizt : null, bestandsaufnahmeId: q ? q.id : null, mitte: centroid(x.kontur).map(Math.round), soll: q ? q.flaeche_m2 : null }; });
+      return { id: f.id, name: f.name || 'Geschoss', h: Math.round((f.geschossHoehe || 2.8) * 1000), g, meta }; });
+  }
+  function floorsFromSaved(p, m) {
+    return p.geschosse.map(f => { const x = (m.geschosse || []).find(y => y.id === f.id) || { knoten: [], waende: [], oeffnungen: [], raeume: [] };
+      const r = syncFromBA(p, f, { knoten: x.knoten || [], waende: x.waende || [], oeffnungen: x.oeffnungen || [] }, x.raeume || []);
+      return { id: f.id, name: f.name || 'Geschoss', h: x.geschossHoehe_mm || Math.round((f.geschossHoehe || 2.8) * 1000), g: fixOpenings(r.g), meta: r.meta, geoAlt: !!(x.baGeo && x.baGeo !== geoKey(f)) }; });
+  }
+  const metaOf = (r, meta) => ({ name: r.name, nutzung: r.nutzung, temp: r.temp, beheizt: r.beheizt, bestandsaufnahmeId: r.bestandsaufnahmeId, mitte: r.mitte, soll: ((meta || []).find(m => m.bestandsaufnahmeId && m.bestandsaufnahmeId === r.bestandsaufnahmeId) || {}).soll ?? null });
+  /* Exportdokument: Höhen immer aus der Bestandsaufnahme (Höhenmodell wie Raumtool 3D), Raumhöhe je Raum, sonst lichte Höhe des Geschosses */
+  function modelDoc(p, floors, version) {
+    const hz = hoehen(p), mm = v => (v == null ? null : Math.round(v * 1000)), f0 = p.geschosse[0] || {};
+    return { id: p.id, projektName: p.name || '', version, quelle: 'Gebäudemodell', geaendert: Date.now(), bodenplatte_mm: f0.bodenD > 0 ? Math.round(f0.bodenD * 10) : null,
+      geschosse: floors.map(f => { const rs = roomsWithMeta(f.g, f.meta), bf = p.geschosse.find(x => x.id === f.id) || {}, h = hz.find(x => x.id === f.id);
+        return { id: f.id, name: f.name, lageFrei: bf.lageFrei || null, baGeo: geoKey(bf), geschossHoehe_mm: h ? mm(h.Ge) : f.h, lichteHoehe_mm: h ? mm(h.lh) : bf.hoehe ? mm(bf.hoehe) : null, niveau_mm: h ? mm(h.niv) : null, rohdecke_mm: h ? mm(h.rde) : null, fussboden_mm: h ? mm(h.fb) : null, abhaengung_mm: h ? mm(h.abh) : null,
+          knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen,
+          raeume: rs.map(r => { const q = (bf.raeume || []).find(x => x.id === r.bestandsaufnahmeId); return { ...metaOf(r, f.meta), hoehe_mm: q && q.hoehe > 0 ? mm(q.hoehe) : null, flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur }; }) }; }) };
+  }
+
+  const api = { floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
