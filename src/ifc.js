@@ -208,6 +208,52 @@
     return ['ISO-10303-21;', 'HEADER;', "FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');", `FILE_NAME(${S((model.projektName || pid) + '.ifc')},'${now}',(${S(opts.bearbeiter || '')}),(${S(opts.organisation || 'cL-energiePlan')}),'Gebaeudemodell','Gebaeudemodell','');`, "FILE_SCHEMA(('IFC2X3'));", 'ENDSEC;', 'DATA;', ...L, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\r\n');
   }
 
-  const api = { exportIFC, wallEnds, guid };
+  /* ---- Prüfung des Modells vor dem Export (gleiche Regeln wie tools/ifc_check.py) ----
+     doc wie für exportIFC; Ergebnis: [{ lv: 'warn' | 'info', geschoss, text, sel: { kind, id } }] */
+  function pruefen(doc) {
+    const out = [], fs = doc.geschosse || [], cm = v => String(Math.round(v / 10)).replace('.', ',');
+    // konvexes Polygon a mit konvexem Polygon b schneiden (Sutherland–Hodgman), Fläche in mm²
+    const clip = (a, b) => { let o = a; for (let i = 0; i < b.length && o.length; i++) { const p = b[i], q = b[(i + 1) % b.length], inside = c => (q[0] - p[0]) * (c[1] - p[1]) - (q[1] - p[1]) * (c[0] - p[0]) >= 0, inp = o; o = [];
+        for (let k = 0; k < inp.length; k++) { const c = inp[k], d = inp[(k + 1) % inp.length], ci = inside(c), di = inside(d);
+          if (ci) o.push(c); if (ci !== di) { const t = ((p[0] - c[0]) * (q[1] - p[1]) - (p[1] - c[1]) * (q[0] - p[0])) / ((d[0] - c[0]) * (q[1] - p[1]) - (d[1] - c[1]) * (q[0] - p[0])); o.push([c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t]); } } }
+      return Math.abs(GM.signedArea(o)); };
+    const ccwq = q => (GM.signedArea(q) < 0 ? q.slice().reverse() : q);
+    for (const f of fs) {
+      const g = { knoten: f.knoten || [], waende: f.waende || [], oeffnungen: f.oeffnungen || [] }, N = new Map(g.knoten.map(n => [n.id, n])), E = wallEnds(g), add = (lv, text, sel) => out.push({ lv, geschoss: f.id, gname: f.name, text, sel });
+      const body = {}, len = {};
+      for (const w of g.waende) { if (GM.isHilf(w) || E.links.has(w.id)) continue; const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y); if (L < 1) continue;
+        const u = [(b.x - a.x) / L, (b.y - a.y) / L], S = [-u[1], u[0]], ts = w.ts == null ? w.t / 2 : w.ts, e = E.get(w.id), A = [a.x - u[0] * e.a, a.y - u[1] * e.a], Bp = [b.x + u[0] * e.b, b.y + u[1] * e.b];
+        body[w.id] = ccwq([[A[0] + S[0] * ts, A[1] + S[1] * ts], [Bp[0] + S[0] * ts, Bp[1] + S[1] * ts], [Bp[0] - S[0] * (w.t - ts), Bp[1] - S[1] * (w.t - ts)], [A[0] - S[0] * (w.t - ts), A[1] - S[1] * (w.t - ts)]]); len[w.id] = [-e.a, L + e.b]; }
+      // Wandkörper überschneiden sich
+      const ids = Object.keys(body);
+      for (let i = 0; i < ids.length; i++) for (let k = i + 1; k < ids.length; k++) { const A = clip(body[ids[i]], body[ids[k]]); if (A > 20000) add('warn', 'Wände überschneiden sich (' + (A / 1e6).toFixed(2).replace('.', ',') + ' m²)', { kind: 'wall', id: ids[i] }); }
+      // Öffnungen außerhalb der Wand oder übereinander
+      const byW = {};
+      for (const o of g.oeffnungen) { if (!o.wand) continue; const r = len[o.wand]; if (!r) { if (!g.waende.some(w => w.id === o.wand && !GM.isHilf(w))) continue; add('warn', 'Öffnung liegt in einem Wandstück ohne Körper', { kind: 'open', id: o.id }); continue; }
+        if (o.abstand < r[0] - 1 || o.abstand + o.breite > r[1] + 1) add('warn', 'Öffnung ragt ' + cm(Math.max(r[0] - o.abstand, o.abstand + o.breite - r[1])) + ' cm über die Wand (wird beim Export eingerückt)', { kind: 'open', id: o.id });
+        (byW[o.wand] ||= []).push(o); }
+      for (const os of Object.values(byW)) { os.sort((a, b) => a.abstand - b.abstand); for (let i = 1; i < os.length; i++) if (os[i - 1].abstand + os[i - 1].breite > os[i].abstand + 1) add('warn', 'Öffnungen überlappen sich', { kind: 'open', id: os[i].id }); }
+      // Räume gegen die Bestandsaufnahme
+      const rs = GM.roomsWithMeta(g, f.raeume || []);
+      for (const m of (f.raeume || [])) { if (!m.bestandsaufnahmeId) continue; const r = rs.find(x => x.bestandsaufnahmeId === m.bestandsaufnahmeId); const soll = m.soll ?? m.flaeche_m2;
+        if (!r) { add('warn', 'Raum „' + m.name + '“ aus der Bestandsaufnahme fehlt im Modell', null); continue; }
+        if (m.soll != null && Math.abs(r.flaeche_m2 - m.soll) > Math.max(0.1, 0.01 * m.soll)) add('warn', '„' + m.name + '“: ' + r.flaeche_m2.toFixed(2).replace('.', ',') + ' m² statt ' + Number(soll).toFixed(2).replace('.', ',') + ' m²', { kind: 'room', mitte: r.mitte }); }
+      for (const r of rs) if (!r.bestandsaufnahmeId) add('info', 'Raum „' + r.name + '“ ist nur im Modell (' + r.flaeche_m2.toFixed(2).replace('.', ',') + ' m²)', { kind: 'room', mitte: r.mitte });
+    }
+    const stp = GM.stapeln(fs.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })));
+    for (const f of fs) if (stp[f.id] && stp[f.id].st === 'abw') out.push({ lv: 'info', geschoss: f.id, gname: f.name, text: 'Andere Außenmaße als das Bezugsgeschoss: bleibt wie gezeichnet stehen', sel: null });
+    return out;
+  }
+
+  /* Öffnungen in den tatsächlichen Wandkörper rücken (Wandenden sind an Stößen gekürzt) */
+  function einruecken(g) {
+    const E = wallEnds(g), N = new Map(g.knoten.map(n => [n.id, n])); let ch = false;
+    const os = (g.oeffnungen || []).map(o => { const w = o.wand && g.waende.find(x => x.id === o.wand); if (!w || GM.isHilf(w) || E.links.has(w.id)) return o; const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), e = E.get(w.id), x0 = -e.a, x1 = L + e.b;
+      const br = Math.min(o.breite, Math.max(200, x1 - x0 - 20)), ab = Math.round(Math.max(x0 + 10, Math.min(x1 - br - 10, o.abstand)));
+      if (br === o.breite && ab === o.abstand) return o; ch = true; return { ...o, breite: br, abstand: ab }; });
+    return ch ? { ...g, oeffnungen: os } : g;
+  }
+
+  const api = { einruecken, pruefen, exportIFC, wallEnds, guid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GMIFC = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

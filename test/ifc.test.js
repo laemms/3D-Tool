@@ -46,7 +46,15 @@ function check(f, strict) {
   console.log('ok  Dach: IfcRoof (Satteldach als ein Körper), Giebel und Kniestock');
   const t6 = exportIFC({ id: 't', geschosse: [{ ...o, raeume: o.raeume.map((r, i) => ({ ...r, beheizt: i ? 'ja' : 'nein', temp: i ? 20 : null })) }] });
   assert.ok(/IFCZONE\('[^']*',#\d+,'Unbeheizt'/.test(t6) && /IFCZONE\('[^']*',#\d+,'Beheizt 20 \\X2\\00B0\\X0\\C'/.test(t6), 'Zonen nach Beheizung'); assert.strictEqual(n(t6, /IFCRELASSIGNSTOGROUP/g), 2);
-  console.log('ok  Raumzonen nach Beheizung (Raumtool: Raum-Zone)'); }
+  console.log('ok  Raumzonen nach Beheizung (Raumtool: Raum-Zone)');
+  const { pruefen, einruecken } = require('../src/ifc.js'), w1 = o.waende.find(w => w.ext && !GM.isHilf(w));
+  assert.strictEqual(pruefen({ geschosse: [o] }).filter(x => x.lv === 'warn').length, 0, 'sauberes Geschoss ohne Hinweise');
+  const o2 = { ...o, oeffnungen: [{ id: 'x', wand: w1.id, typ: 'fenster', abstand: -300, breite: 1000, hoehe: 1200, brh: 900 }, { id: 'y', wand: w1.id, typ: 'fenster', abstand: 500, breite: 1000, hoehe: 1200, brh: 900 }] };
+  const pr = pruefen({ geschosse: [o2] }).map(x => x.text).join(' | '); assert.ok(/ragt/.test(pr) && /überlappen/.test(pr), pr);
+  assert.ok(einruecken(o2).oeffnungen[0].abstand > -300, 'einrücken'); assert.ok(!pruefen({ geschosse: [einruecken(o2)] }).some(x => /ragt/.test(x.text)), 'nach dem Einrücken nichts mehr über der Wand');
+  let g = { knoten: [], waende: [], oeffnungen: [] }; g = GM.edit.addWall(g, [0, 0], [5000, 0], { t: 300, ts: 150 }); g = GM.edit.addWall(g, [0, 100], [5000, 100], { t: 300, ts: 150 });
+  assert.ok(pruefen({ geschosse: [{ id: 'x', name: 'X', ...g }] }).some(x => /überschneiden/.test(x.text)), 'Überschneidung erkannt');
+  console.log('ok  Prüfung: Überschneidung, Öffnung über Wand, Überlappung'); }
 { const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');

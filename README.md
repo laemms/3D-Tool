@@ -52,6 +52,9 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Raumzonen (IfcZone) nach Beheizung: „Unbeheizt“, „Beheizt 20 °C“ … Raumtool 3D übernimmt sie als Raum-Zone.
   Die Konditionierung (beheizt/unbeheizt) übernimmt Raumtool aus der IFC nicht (getestet: Zone, ObjectType,
   Pset_SpaceThermalRequirements); U-Werte setzt Chris in der Heizlast (H73), deshalb keine U-Werte im IFC.
+- Prüfung im Gebäudemodell (`GMIFC.pruefen`): Wandüberschneidungen, Öffnungen über der Wand oder übereinander,
+  Räume gegen die Bestandsaufnahme, Geschosse mit anderen Außenmaßen. Eintrag antippen wählt das Bauteil.
+  Öffnungen werden beim Laden in den Wandkörper gerückt (`GMIFC.einruecken`). Zwei Finger zoomen (2D und 3D).
 - Raumtrennung ohne Wand (offener Übergang) geht als 2-cm-Wand „Virtuelle Wand“ ins IFC: Raumtool 3D (K12) trennt
   Räume nur an Wänden, ignoriert `IfcVirtualElement` und Wände unter 2 cm (Test 25.11.2026). Kostet je Raum ~0,04 m².
 

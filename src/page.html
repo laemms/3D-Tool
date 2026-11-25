@@ -58,7 +58,8 @@ tr.on td{background:var(--soft)}
 .msg{margin:8px 0 0;font-size:14px}
 dialog{border:1px solid var(--line2);border-radius:14px;background:var(--card);color:var(--ink);max-width:420px}
 dialog::backdrop{background:rgba(0,0,0,.35)}
-.grid2{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}.grid2 input,.grid2 select{width:100%;min-width:0}
+.gridlab{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}.gridlab input,.gridlab select{width:100%;min-width:0}.pr span{flex:1;min-width:0;white-space:normal}
+.pr{display:flex;gap:8px;align-items:flex-start;width:100%;text-align:left;border:0;background:none;padding:6px 4px;border-radius:8px;cursor:pointer;font:inherit;color:inherit}.pr:hover{background:var(--bg)}.pr b{min-width:2.2em;font-weight:600}.pr.warn b{color:var(--warn,#b45309)}.pr.info b{color:var(--mute)}
 </style>
 </head>
 <body>
@@ -101,8 +102,9 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <aside class="side">
     <section class="card" id="props"><h2>Auswahl</h2><p class="small">Wand, Öffnung oder Raum antippen.</p></section>
     <section class="card"><h2>Räume</h2><div id="rooms"></div></section>
+    <section class="card" id="pruefcard"><h2 id="pruef-h">Prüfung</h2><div id="pruef" class="small"></div></section>
     <section class="card" id="dachcard"><h2>Dach</h2>
-      <div class="grid2">
+      <div class="gridlab">
         <label class="small" for="d-form">Form</label><select id="d-form"><option value="sattel">Satteldach</option><option value="pult">Pultdach</option><option value="flach">Flachdach</option><option value="kein">kein Dach</option></select>
         <label class="small" for="d-neig">Neigung °</label><input id="d-neig" inputmode="decimal">
         <label class="small" for="d-first">First</label><select id="d-first"><option value="lang">parallel zur langen Seite</option><option value="quer">parallel zur kurzen Seite</option></select>
@@ -176,6 +178,7 @@ function selectProject(pid) {
   st.undo = []; st.redo = []; st.sel = null; st.chain = null; st.vw = null;
   $('floors').innerHTML = st.floors.map(f => `<button data-f="${esc(f.id)}" aria-pressed="${f.id === st.fid}">${esc(f.name)}</button>`).join('');
   $('saveinfo').textContent = m && m.version >= MODEL_VERSION ? 'Gespeichertes Modell geladen (' + new Date(m.geaendert || 0).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) + ').' : 'Aus der Bestandsaufnahme übernommen, noch nicht gespeichert.';
+  st.floors.forEach(f => { f.g = GMIFC.einruecken(f.g); });
   const alt = st.floors.filter(f => f.geoAlt).map(f => f.name);
   if (alt.length) $('saveinfo').innerHTML = esc('Die Räume in der Bestandsaufnahme wurden geändert (' + alt.join(', ') + '). Fenster und Türen sind übernommen, die Wände noch nicht. ') + '<button id="reba" class="btn small">Wände neu übernehmen</button>';
   if ($('reba')) $('reba').onclick = e => { const b = e.currentTarget; if (!b.dataset.ok) { b.dataset.ok = '1'; b.textContent = 'Wirklich? Änderungen an Wänden gehen verloren – nochmal klicken'; return; } st.floors = fromBA(p); st.dirty = true; scheduleSave(); $('saveinfo').textContent = 'Neu aus der Bestandsaufnahme übernommen.'; st.undo = []; st.redo = []; refresh(true); };
@@ -361,6 +364,15 @@ const DF = [['d-form', 'form'], ['d-neig', 'neigung', 1], ['d-first', 'first'], 
 function renderDach() { const d = st.dach || {}; for (const [id, k, f] of DF) { const el = $(id); if (document.activeElement === el) continue; el.value = f ? String(Math.round((d[k] || 0) / f * 10) / 10).replace('.', ',') : d[k]; }
   const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). Grundriss: Außenumriss als Rechteck.' : 'Kein Dach im Modell.'; }
 for (const [id, k, f] of DF) $(id).addEventListener('change', e => { const v = f ? num(e.target.value) : e.target.value; if (f && (v == null || v < 0)) { renderDach(); return; } st.dach = { ...st.dach, [k]: f ? Math.round(v * f) : v, gesetzt: true }; st.dirty = true; scheduleSave(); renderDach(); if (st.view === 'haus') draw3d(); });
+/* ---------- Prüfung (wie vor dem Raumtool-Import) ---------- */
+function renderPruefung() {
+  const box = $('pruef'); if (!st.pid) { box.textContent = ''; return; } let list = [];
+  try { list = GMIFC.pruefen(modelDoc()); } catch (e) { box.textContent = 'Prüfung nicht möglich: ' + e.message; return; }
+  const nw = list.filter(x => x.lv === 'warn').length; $('pruef-h').textContent = nw ? 'Prüfung · ' + nw + (nw === 1 ? ' Hinweis' : ' Hinweise') : 'Prüfung';
+  if (!list.length) { box.innerHTML = '<p>Alles in Ordnung: Wände ohne Überschneidung, Öffnungen in ihren Wänden, Räume wie in der Bestandsaufnahme.</p>'; return; }
+  box.innerHTML = list.map((x, i) => `<button class="pr ${x.lv}" data-i="${i}"><b>${esc(x.gname || '')}</b><span>${esc(x.text)}</span></button>`).join('');
+  box.querySelectorAll('button.pr').forEach(b => b.onclick = () => { const x = list[+b.dataset.i]; if (x.geschoss !== st.fid) selectFloor(x.geschoss); if (st.view !== '2d') setView('2d'); st.sel = x.sel || null; refresh(); });
+}
 function renderRooms() {
   const f = fl(); if (!f) return; const rs = GM.roomsWithMeta(f.g, f.meta), sum = rs.reduce((a, r) => a + r.flaeche_m2, 0);
   $('rooms').innerHTML = rs.length ? `<table><thead><tr><th>Raum</th><th class="r">m²</th><th class="r">Bestand m²</th></tr></thead><tbody>${rs.map(r => { const m = f.meta.find(x => x.bestandsaufnahmeId && x.bestandsaufnahmeId === r.bestandsaufnahmeId), on = st.sel && st.sel.kind === 'room' && GM.inPoly(st.sel.mitte, r.kontur); return `<tr class="${on ? 'on' : ''}"><td>${esc(r.name)}</td><td class="r">${nf(r.flaeche_m2)}</td><td class="r">${m && m.soll != null ? nf(m.soll) : '–'}</td></tr>`; }).join('')}<tr><td><b>Summe</b></td><td class="r"><b>${nf(sum)}</b></td><td></td></tr></tbody></table>` : '<p class="small">Noch keine geschlossenen Räume. Mit „Wand“ eine Kontur zeichnen.</p>';
@@ -393,12 +405,20 @@ function renderProps() {
 }
 function updButtons() { $('undo').disabled = !st.undo.length; $('redo').disabled = !st.redo.length; }
 function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht, Mausrad zoomt.' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt antippen oder Länge + Richtung · Esc oder „Fertig“ beendet' : 'Ersten Punkt antippen') : st.tool === 'open' ? 'Wand antippen, um die Öffnung zu setzen' : 'Ziehen auf leerer Fläche verschiebt den Plan · Mausrad zoomt'; }
-function refresh(refit) { if (refit) st.vw = null; const f = fl(); if (!f) return; st.view !== '2d' ? draw3d() : draw2d(); renderRooms(); renderDach(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
+function refresh(refit) { if (refit) st.vw = null; const f = fl(); if (!f) return; st.view !== '2d' ? draw3d() : draw2d(); renderRooms(); renderDach(); renderPruefung(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
 
 /* ---------- Zeiger ---------- */
 const svg = $('plan');
+/* Zwei Finger: zoomen und verschieben (Tablet) */
+const touches = new Map(); let pinch = null;
+const pinchInfo = () => { const [a, b] = [...touches.values()], r = svg.getBoundingClientRect(); return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2 - r.left, my: (a.y + b.y) / 2 - r.top }; };
+svg.addEventListener('pointerdown', e => { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2 && st.vw) { st.drag = null; st.pan = null; pinch = pinchInfo(); } }, true);
+svg.addEventListener('pointermove', e => { if (!touches.has(e.pointerId)) return; touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && touches.size === 2) { e.stopImmediatePropagation(); const q = pinchInfo(); st.vw.ox += q.mx - pinch.mx; st.vw.oy += q.my - pinch.my; zoomAt(q.d / pinch.d, q.mx, q.my); pinch = q; } }, true);
+const endTouch = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
+svg.addEventListener('pointerup', endTouch, true); svg.addEventListener('pointercancel', endTouch, true);
 svg.addEventListener('pointerdown', e => {
-  if (!st.vw) return; const p = toW(e); svg.setPointerCapture(e.pointerId);
+  if (!st.vw || pinch) return; const p = toW(e); svg.setPointerCapture(e.pointerId);
   if (st.tool === 'wall') { const sp = snap(p, st.chain ? st.chain.pts[st.chain.pts.length - 1] : null); placePoint(sp.p); return; }
   if (st.tool === 'open') { const h = hit(p); if (h && h.kind === 'wall') { const ob = { typ: $('o-typ').value, breite: Math.round((num($('o-b').value) || 1) * 1000), hoehe: Math.round((num($('o-h').value) || 1.4) * 1000), brh: Math.round((num($('o-brh').value) || 0) * 1000) }; const f = fl(); const before = f.g.oeffnungen.length; change(g => GM.edit.addOpening(g, h.id, h.s, ob)); if (fl().g.oeffnungen.length > before) st.sel = { kind: 'open', id: fl().g.oeffnungen[fl().g.oeffnungen.length - 1].id }; refresh(); } return; }
   const h = hit(p);
@@ -427,8 +447,10 @@ async function draw3d() {
     const rnd = new T.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }), scene = new T.Scene(), cam = new T.PerspectiveCamera(40, 1, 100, 200000);
     scene.add(new T.HemisphereLight(0xffffff, 0x8a9a92, 0.9)); const sun = new T.DirectionalLight(0xffffff, 0.6); sun.position.set(-1, 2, 1.5); scene.add(sun);
     st.t3 = { rnd, scene, cam, grp: null, rot: 1.15, tilt: 0.7, dist: 20000, c: [0, 0, 0] };
-    let drag = null; cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); });
-    cv.addEventListener('pointermove', e => { if (!drag) return; const t = st.t3; t.rot -= (e.clientX - drag[0]) * 0.008; t.tilt = Math.max(0.1, Math.min(1.45, t.tilt + (e.clientY - drag[1]) * 0.006)); drag = [e.clientX, e.clientY]; frame(); });
+    let drag = null; const tp = new Map(); let pd = 0; const pdist = () => { const [a, b] = [...tp.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]) || 1; };
+    cv.addEventListener('pointerdown', e => { tp.set(e.pointerId, [e.clientX, e.clientY]); if (tp.size === 2) { drag = null; pd = pdist(); return; } drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); });
+    const tend = e => { tp.delete(e.pointerId); if (tp.size < 2) pd = 0; }; cv.addEventListener('pointercancel', tend); cv.addEventListener('pointerup', tend);
+    cv.addEventListener('pointermove', e => { if (tp.has(e.pointerId)) tp.set(e.pointerId, [e.clientX, e.clientY]); if (pd && tp.size === 2) { const d = pdist(); st.t3.dist = Math.max(3000, Math.min(120000, st.t3.dist * pd / d)); pd = d; frame(); return; } if (!drag) return; const t = st.t3; t.rot -= (e.clientX - drag[0]) * 0.008; t.tilt = Math.max(0.1, Math.min(1.45, t.tilt + (e.clientY - drag[1]) * 0.006)); drag = [e.clientX, e.clientY]; frame(); });
     cv.addEventListener('pointerup', () => { drag = null; });
     cv.addEventListener('wheel', e => { e.preventDefault(); st.t3.dist = Math.max(3000, Math.min(120000, st.t3.dist * (e.deltaY > 0 ? 1.1 : 0.9))); frame(); }, { passive: false });
   }
