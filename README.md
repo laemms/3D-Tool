@@ -60,8 +60,10 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
   - Jede IfcSlab .ROOF. wird ein eigenes Raumtool-Dach; nur solche Dächer begrenzen die Raumvolumen. Das Satteldach geht deshalb
     als zwei Flächen raus (`dachPrisma: true` = alter Einzelkörper, begrenzt keine Räume).
   - Dachflächen-Profil muss eine einfache Schleife sein (Fehler bis 7a39aec: Punkte umsortiert → Fläche lag flach). Test prüft alle Profile.
-  - Raumtool übernimmt Dachneigung, Traufe und First exakt, nimmt aber eigene Dachdicke (15 cm). Raumvolumen unter der Schräge rechnet
-    Raumtool selbst (5–10 % unter der Rechnung des Gebäudemodells); ohne Schräge identisch.
+  - Raumtool übernimmt Dachneigung, Traufe und First exakt. Die Plattendicke wird „Dicke der Eindeckung“, darunter legt Raumtool seine
+    „Dicke der Konstruktion“ (Vorgabe 15 cm). Exportiert wird deshalb Gesamtdicke − 15 cm (`rtKonstruktion`), Pset 'Gebaeudemodell'
+    nennt beide Werte. Damit rechnet Raumtool die Raumvolumen unter der Schräge wie das Gebäudemodell (Walmdach ausgebaut: Wohnen
+    51,52/51,53 m³, Bad 7,47/7,44 m³, Flur 16,45/16,43 m³). Ohne Schräge identisch.
   - IfcBooleanClippingResult wird bei Wänden und Decken ignoriert: Wände kommen voll hoch an, Raumtool schneidet sie im Volumen selbst.
     Die Kehlbalkenlage wird deshalb als beschnittener Grundriss exportiert. Raumtool legt je Geschoss zusätzlich eine eigene
     Decke (25 cm) an; im ausgebauten Dach ragt sie in der 3D-Ansicht durchs Dach.

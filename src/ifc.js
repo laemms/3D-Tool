@@ -190,12 +190,16 @@
       if (DA && DA.geschoss === f.id) {
         const toI = c => [c[0] / 1000, -c[1] / 1000, (c[2] - elev[fi]) / 1000], parts = [];
         const prism = DA.form === 'sattel' && DA.flaechen.length === 2 && opts.dachPrisma === true; /* Standard: Einzelflächen – nur die übernimmt Raumtool 3D als Dach, das die Räume begrenzt (Test 25.11.2026) */
+        /* Raumtool 3D liest die Plattendicke als „Dicke der Eindeckung“ und legt seine „Dicke der Konstruktion“ (Vorgabe 15 cm) darunter
+           (Test 25.11.2026): exportiert wird die Gesamtdicke minus 15 cm, damit die Dachunterseite und die Raumvolumen stimmen */
+        const dEx = Math.max(20, DA.dicke - (opts.rtKonstruktion == null ? 150 : opts.rtKonstruktion));
         if (!prism) DA.flaechen.forEach((q0, k) => { const q = q0.map(toI), e = nrm(sub3(q[1], q[0])); let Z = nrm(crs(e, sub3(q[q.length - 1], q[0]))); if (Z[2] < 0) Z = Z.map(v => -v);
           // Profil immer von der Traufe zum First (lokal +Y = bergauf), Ursprung an der linken Traufecke: so liest Raumtool 3D beide Dachseiten gleich
           const up = nrm(sub3([0, 0, 1], Z.map(v => v * Z[2]))), X = crs(up, Z), o = q.reduce((m, c) => { const d = sub3(c, q[0]); return Math.min(m, dot3(d, X)); }, 0), lo = q.reduce((m, c) => Math.min(m, c[2]), 1e9);
           const O = q.filter(c => Math.abs(c[2] - lo) < 1e-6).reduce((b, c) => (dot3(sub3(c, q[0]), X) < dot3(sub3(b, q[0]), X) ? c : b));
-          const [pl, sh] = PLATE(lpS, [...q.slice(q.indexOf(O)), ...q.slice(0, q.indexOf(O))] /* Reihenfolge rotieren, nicht umsortieren: sonst Schleife im Profil */, X, Z, DA.dicke / 1000, true), sl = E(`IFCSLAB(${G('df|' + f.id + '|' + k)},${oh},${S('Dachfläche ' + (k + 1))},$,$,${pl},${sh},$,.ROOF.)`); parts.push(sl);
-          PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['PitchAngle', 'IFCPLANEANGLEMEASURE', R(Math.acos(Math.min(1, Z[2])))]], 'dfc|' + f.id + '|' + k); });
+          const [pl, sh] = PLATE(lpS, [...q.slice(q.indexOf(O)), ...q.slice(0, q.indexOf(O))] /* Reihenfolge rotieren, nicht umsortieren: sonst Schleife im Profil */, X, Z, dEx / 1000, true), sl = E(`IFCSLAB(${G('df|' + f.id + '|' + k)},${oh},${S('Dachfläche ' + (k + 1))},$,$,${pl},${sh},$,.ROOF.)`); parts.push(sl);
+          PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['PitchAngle', 'IFCPLANEANGLEMEASURE', R(Math.acos(Math.min(1, Z[2])))]], 'dfc|' + f.id + '|' + k);
+          PS(sl, 'Gebaeudemodell', [['Dachdicke gesamt (mm)', 'IFCREAL', R(DA.dicke)], ['Davon exportiert (mm)', 'IFCREAL', R(dEx)]], 'dfg|' + f.id + '|' + k); });
         // Satteldach als ein Körper: Querschnitt (Giebelebene) entlang des Firsts extrudiert – Raumtool 3D übernimmt getrennte Dachflächen nur teilweise
         if (prism) {
           const [f1, f2] = DA.flaechen.map(q => q.map(toI)), dz = DA.dicke / 1000 / Math.cos(Math.atan2(f1[2][2] - f1[0][2], Math.hypot(f1[2][0] - f1[1][0], f1[2][1] - f1[1][1])));
