@@ -33,7 +33,10 @@ function check(f, strict) {
   const t2 = exportIFC({ id: 't', bodenplatte_mm: 250, geschosse: [{ ...o, niveau_mm: -20, rohdecke_mm: 300, geschossHoehe_mm: 2800, lichteHoehe_mm: 2500, raeume: o.raeume.map((r, i) => ({ ...r, hoehe_mm: i ? null : 2590 })) }] });
   assert.strictEqual(n(t2, /IFCSLAB\(/g), 2, 'Decke und Bodenplatte'); assert.ok(/\.ELEMENT\.,-0\.02\)/.test(t2), 'Niveau aus Höhenmodell');
   assert.ok(/'LichteHoehe',\$,IFCLENGTHMEASURE\(2\.59\)/.test(t2) && /'LichteHoehe',\$,IFCLENGTHMEASURE\(2\.5\)/.test(t2), 'Raumhöhe je Raum');
-  console.log('ok  Höhen: Niveau, Raumhöhe, Decke und Bodenplatte'); }
+  console.log('ok  Höhen: Niveau, Raumhöhe, Decke und Bodenplatte');
+  const w0 = o.waende.find(w => w.ext && !GM.isHilf(w)), t3 = exportIFC({ id: 't', geschosse: [{ ...o, oeffnungen: [{ id: 'f1', wand: w0.id, typ: 'fenstertuer', abstand: 100, breite: 1000, hoehe: 2100, brh: 0 }, { id: 'f2', wand: w0.id, typ: 'aussentuer', abstand: 1300, breite: 900, hoehe: 2000, brh: 0 }] }] });
+  assert.strictEqual(n(t3, /IFCWINDOW\(/g), 1, 'Fenstertür als Fenster'); assert.strictEqual(n(t3, /IFCDOOR\(/g), 1);
+  console.log('ok  Fenstertür als IfcWindow'); }
 { const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');

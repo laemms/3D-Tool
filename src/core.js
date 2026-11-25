@@ -173,9 +173,10 @@
     for (const op of openings) {
       let best = null; for (const w of g.waende) { const a = [N.get(w.a).x, N.get(w.a).y], b = [N.get(w.b).x, N.get(w.b).y], pr = segProj(op.m, a, b); if (pr.t >= 0 && pr.t <= 1 && (!best || pr.d < best.d)) best = { w, d: pr.d, t: pr.t, L: len(sub(b, a)) }; }
       if (!best || best.d > 200) continue;
-      const abstand = Math.round(best.t * best.L - op.breite / 2);
+      // innerhalb der Wand halten (Abschnitte der Bestandsaufnahme können über einen Wandstoß hinausreichen)
+      const breite = Math.min(op.breite, Math.max(200, best.L - 20)), abstand = Math.round(Math.max(10, Math.min(best.L - breite - 10, best.t * best.L - breite / 2)));
       if (g.oeffnungen.some(x => x.wand === best.w.id && Math.abs(x.abstand - abstand) < 50)) continue;
-      g.oeffnungen.push({ id: 'o' + (g.oeffnungen.length + 1), wand: best.w.id, typ: op.typ, abstand, breite: op.breite, brh: op.brh, hoehe: op.hoehe, quelle: op.quelle });
+      g.oeffnungen.push({ id: 'o' + (g.oeffnungen.length + 1), wand: best.w.id, typ: op.typ, abstand, breite, brh: op.brh, hoehe: op.hoehe, quelle: op.quelle });
     }
     // Räume des Graphen den Räumen der Bestandsaufnahme zuordnen
     const all = rooms(g).map(fr => { const ref = roomRefs.find(r => inPoly(r.mitte, fr.achse)); return { ...fr, bestandsaufnahme: ref || null }; });
@@ -266,13 +267,15 @@
     return L;
   }
 
-  /* überlappende Öffnungen einer Wand gleichmäßig verteilen (Reihenfolge bleibt), z. B. aus älteren Modellen */
+  /* Öffnungen in ihre Wand legen und überlappende gleichmäßig verteilen (Reihenfolge bleibt), z. B. aus älteren Modellen */
   function fixOpenings(g) {
     const N = nodeMap(g); let changed = false; const os = (g.oeffnungen || []).map(o => ({ ...o }));
     for (const w of g.waende) {
-      const xs = os.filter(o => o.wand === w.id).sort((a, b) => a.abstand - b.abstand); if (xs.length < 2) continue;
+      const xs = os.filter(o => o.wand === w.id).sort((a, b) => a.abstand - b.abstand); if (!xs.length) continue;
+      const [a, b] = wallEnds(g, w, N), L = len(sub(b, a));
+      for (const o of xs) { const br = Math.min(o.breite, Math.max(200, L - 20)), ab = Math.round(Math.max(10, Math.min(L - br - 10, o.abstand))); if (br !== o.breite || ab !== o.abstand) { o.breite = br; o.abstand = ab; changed = true; } }
       if (!xs.some((o, i) => i && xs[i - 1].abstand + xs[i - 1].breite > o.abstand)) continue;
-      const [a, b] = wallEnds(g, w, N), L = len(sub(b, a)), tot = xs.reduce((s, o) => s + o.breite, 0), gap = Math.max(0, (L - tot) / (xs.length + 1)); let c = 0;
+      const tot = xs.reduce((s, o) => s + o.breite, 0), gap = Math.max(0, (L - tot) / (xs.length + 1)); let c = 0;
       xs.forEach(o => { c += gap; o.abstand = Math.round(c); c += o.breite; }); changed = true;
     }
     return changed ? { ...g, oeffnungen: os } : g;

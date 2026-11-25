@@ -65,3 +65,12 @@ for k, (sid, sname) in enumerate(storeys.items()):
                     if hasattr(g, 'exterior'): ax.fill(*g.exterior.xy, color='red')
     ax.set_title(sname); ax.set_aspect('equal'); ax.axis('off')
 plt.tight_layout(); plt.savefig(sys.argv[2], dpi=110)
+# Öffnungen müssen entlang der Wand innerhalb des Wandkörpers liegen (sonst erkennt Raumtool 3D den Raum nicht)
+bad = 0
+for i, (t, a) in E.items():
+    if t != 'IFCRELVOIDSELEMENT': continue
+    aa = args(a); wa = args(E[ref(aa[4])][1]); ob = args(E[ref(aa[5])][1])
+    wq = body(ref(wa[6]))[0]; oq = body(ref(ob[6]))[0]; wx = [x for x, y in wq]; ox = [x for x, y in oq]
+    out = max(0, min(wx) - min(ox)) + max(0, max(ox) - max(wx))
+    if out > 0.001: bad += 1; print(f'Öffnung ragt {out:.3f} m aus {dec(wa[2])}')
+print(f'Öffnungen außerhalb der Wand: {bad}')

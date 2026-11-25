@@ -106,6 +106,7 @@ t('Mehrere Fenster (anz 2) auf kurzer Wand überlappen nicht', () => {
 t('Gespeicherte Modelle: überlappende Öffnungen werden verteilt', () => { let g = { knoten: [], waende: [], oeffnungen: [] }; g = GM.edit.addWall(g, [0, 0], [3300, 0], { t: 365, ts: 0, ext: true });
   const id = g.waende[0].id; g.oeffnungen = [{ id: 'o1', wand: id, abstand: 620, breite: 1200 }, { id: 'o2', wand: id, abstand: 1720, breite: 1200 }];
   assert.deepStrictEqual(GM.fixOpenings(g).oeffnungen.map(o => o.abstand), [300, 1800]); const h = { ...g, oeffnungen: [g.oeffnungen[0]] }; assert.strictEqual(GM.fixOpenings(h), h);
+  const k = { ...g, oeffnungen: [{ id: 'd', wand: id, abstand: -65, breite: 885 }] }; assert.strictEqual(GM.fixOpenings(k).oeffnungen[0].abstand, 10, 'Tür ragte über das Wandende');
 });
 console.log('Bearbeiten geprüft');
 
