@@ -243,6 +243,26 @@
     return caps;
   }
 
-  const api = { junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  /* Außenumriss eines Geschosses: äußerer Rand des Wandgraphen, um die Außenwanddicke nach außen versetzt (mm) */
+  function umriss(g) {
+    const out = faces(g, true).filter(f => f.A < -1e3).sort((a, b) => a.A - b.A);
+    return out.length ? innerContour(out[0], g).map(p => [Math.round(p[0]), Math.round(p[1])]) : [];
+  }
+
+  /* Höhenmodell wie Bestandsaufnahme und Raumtool 3D (Werte in m):
+     Geschosshöhe = Fußboden + lichte Höhe + Abhängung + Rohdecke; Niveau = OKFF bezogen auf ±0,00 (EG) */
+  function hoehen(p) {
+    const fs = p.geschosse || [], n = fs.length, eg = f => /^(eg|erd)/i.test(f.name || '');
+    const L = fs.map(f => { const fb = (f.fb || 0) / 100, abh = (f.abh || 0) / 100, lh = f.hoehe || 2.5, rd = f.deckeD > 0 ? f.deckeD / 100 : (f.geschossHoehe > 0 ? Math.max(0, f.geschossHoehe - lh - fb - abh) : 0.2); return { id: f.id, fb, abh, lh, rd, G: fb + lh + abh + rd }; });
+    if (!n) return L;
+    let a = fs.findIndex(f => f.nivFix && f.okff != null); if (a < 0) { a = fs.findIndex(eg); if (a < 0) a = 0; }
+    L[a].niv = (fs[a].nivFix || eg(fs[a])) && fs[a].okff != null ? fs[a].okff : (eg(fs[a]) ? 0 : fs[a].okff ?? 0);
+    for (let i = a + 1; i < n; i++) L[i].niv = fs[i].nivFix && fs[i].okff != null ? fs[i].okff : L[i - 1].niv + L[i - 1].G;
+    for (let i = a - 1; i >= 0; i--) L[i].niv = fs[i].nivFix && fs[i].okff != null ? fs[i].okff : L[i + 1].niv - L[i].G;
+    L.forEach((x, i) => { x.Ge = i < n - 1 ? L[i + 1].niv - x.niv : x.G; x.rde = x.Ge - x.fb - x.lh - x.abh; });
+    return L;
+  }
+
+  const api = { hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

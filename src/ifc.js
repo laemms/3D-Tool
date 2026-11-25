@@ -82,6 +82,7 @@
     const fs = model.geschosse || [], iEG = Math.max(0, fs.findIndex(f => /^(eg|erd)/i.test(f.name || ''))), elev = []; let z = 0;
     for (let i = iEG; i < fs.length; i++) { elev[i] = z; z += fs[i].geschossHoehe_mm || 2800; }
     z = 0; for (let i = iEG - 1; i >= 0; i--) { z -= fs[i].geschossHoehe_mm || 2800; elev[i] = z; }
+    fs.forEach((f, i) => { if (f.niveau_mm != null) elev[i] = f.niveau_mm; }); // Höhenmodell der Bestandsaufnahme (OKFF)
     const storeys = [], mat = {}, matOf = (t, sense, off) => { const k = t + '|' + sense + '|' + off; if (!mat[k]) mat[k] = E(`IFCMATERIALLAYERSETUSAGE(${E(`IFCMATERIALLAYERSET((${E(`IFCMATERIALLAYER(${E(`IFCMATERIAL(${S('Wand ' + R(t / 10) + ' cm')})`)},${M(t)},$)`)}),${S('Wand ' + R(t / 10) + ' cm')})`)},.AXIS2.,.${sense}.,${M(off)})`); return mat[k]; }, matRel = new Map();
     let raumNr = 0;
     fs.forEach((f, fi) => {
@@ -112,7 +113,7 @@
           PS(fill, tuer ? 'Pset_DoorCommon' : 'Pset_WindowCommon', [['IsExternal', 'IFCBOOLEAN', B(o.typ !== 'innentuer')]], 'fc|' + key);
         }
       }
-      const rms = GM.roomsWithMeta(g, f.raeume || []);
+      const mt = f.raeume || [], rms = GM.roomsWithMeta(g, mt).map(r => { const m = mt.find(x => x.bestandsaufnahmeId && x.bestandsaufnahmeId === r.bestandsaufnahmeId) || mt.find(x => x.name === r.name) || {}; return { ...r, hoehe_mm: m.hoehe_mm || null }; });
       // Raumtrennung ohne Wand (offener Übergang): Raumtool 3D trennt Räume nur an Wänden (IfcVirtualElement wird ignoriert,
       // Wände < 2 cm ebenso). Standard daher: 2-cm-Trennwand, 6 cm in die Nachbarwände verlängert (kostet je Raum ~0,04 m²).
       if (opts.trennung !== 'aus') for (const w of g.waende) {
@@ -134,10 +135,20 @@
       }
       for (const r of rms) {
         raumNr++; const q = ccw(r.kontur.map(W)), key = f.id + '|' + raumNr;
-        const s = E(`IFCSPACE(${G('sp|' + f.id + '|' + (r.bestandsaufnahmeId || r.mitte.join(',')))},${oh},${S(String(raumNr).padStart(2, '0'))},${S(r.nutzung || '')},$,${LP(lpS, 0, 0, 0)},${SH(EX(q, lichte / 1000, 0))},${S(r.name + (r.beheizt === 'nein' ? ' (unbeheizt)' : r.temp != null ? ' (' + String(r.temp).replace('.', ',') + ' °C)' : ''))},.ELEMENT.,.INTERNAL.,$)`);
+        const s = E(`IFCSPACE(${G('sp|' + f.id + '|' + (r.bestandsaufnahmeId || r.mitte.join(',')))},${oh},${S(String(raumNr).padStart(2, '0'))},${S(r.nutzung || '')},$,${LP(lpS, 0, 0, 0)},${SH(EX(q, (r.hoehe_mm || lichte) / 1000, 0))},${S(r.name + (r.beheizt === 'nein' ? ' (unbeheizt)' : r.temp != null ? ' (' + String(r.temp).replace('.', ',') + ' °C)' : ''))},.ELEMENT.,.INTERNAL.,$)`);
         sp.push(s);
         PS(s, 'Pset_SpaceThermalDesign', [['HeatingDryBulb', 'IFCTHERMODYNAMICTEMPERATUREMEASURE', r.beheizt === 'nein' || r.temp == null ? null : R(r.temp)]], 'td|' + key);
-        PS(s, 'Gebaeudemodell', [['Raumnummer', 'IFCINTEGER', raumNr], ['Flaeche', 'IFCAREAMEASURE', R(Math.round(r.flaeche_m2 * 100) / 100)], ['LichteHoehe', 'IFCLENGTHMEASURE', M(lichte)], ['Beheizt', 'IFCBOOLEAN', B(r.beheizt !== 'nein')]], 'gm|' + key);
+        PS(s, 'Gebaeudemodell', [['Raumnummer', 'IFCINTEGER', raumNr], ['Flaeche', 'IFCAREAMEASURE', R(Math.round(r.flaeche_m2 * 100) / 100)], ['LichteHoehe', 'IFCLENGTHMEASURE', M(r.hoehe_mm || lichte)], ['Beheizt', 'IFCBOOLEAN', B(r.beheizt !== 'nein')]], 'gm|' + key);
+      }
+      // Rohdecke über dem Geschoss (bzw. oberste Geschossdecke) und Bodenplatte unter dem untersten Geschoss
+      const um = f.umriss || GM.umriss(g), rd = f.rohdecke_mm;
+      if (um.length >= 3 && rd > 0) {
+        const q = ccw(um.map(W)), sl = E(`IFCSLAB(${G('sl|' + f.id)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + R(rd / 10) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, rd / 1000, (H - rd) / 1000))},$,.FLOOR.)`);
+        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id);
+      }
+      if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) {
+        const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + f.id)},${oh},${S('Bodenplatte ' + R(bp / 10) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);
+        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'bpc|' + f.id);
       }
       AG(st, sp, 'sp|' + f.id);
       if (els.length) E(`IFCRELCONTAINEDINSPATIALSTRUCTURE(${G('cs|' + f.id)},${oh},$,$,(${els.join(',')}),${st})`);

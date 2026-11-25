@@ -90,6 +90,14 @@ console.log(ok + ' Tests bestanden');
   });
   module.exports.offen = { id: 'eg', name: 'EG', knoten: res.graph.knoten, waende: res.graph.waende, oeffnungen: res.graph.oeffnungen, raeume: res.raeume.map(r => ({ name: r.bestandsaufnahme.name, mitte: GM.centroid(r.kontur) })) };
 }
+t('Höhenmodell wie Bestandsaufnahme: KG fixiert, EG/OG aus Geschosshöhen', () => {
+  const h = GM.hoehen({ geschosse: [{ name: 'KG', hoehe: 2.5, okff: -2.7, nivFix: true, deckeD: 18 }, { name: 'EG', hoehe: 2.5, geschossHoehe: 2.8 }, { name: 'OG', hoehe: 2.5, geschossHoehe: 2.8 }] });
+  assert.deepStrictEqual(h.map(x => Math.round(x.niv * 100)), [-270, -2, 278]); assert.deepStrictEqual(h.map(x => Math.round(x.rde * 100)), [18, 30, 30]);
+});
+t('Außenumriss: Rechteck mit Außenwand außen', () => { let g = { knoten: [], waende: [], oeffnungen: [] }; const A = { t: 365, ts: 0, ext: true };
+  g = GM.edit.addWall(g, [0, 0], [10000, 0], A); g = GM.edit.addWall(g, [10000, 0], [10000, 8000], A); g = GM.edit.addWall(g, [10000, 8000], [0, 8000], A); g = GM.edit.addWall(g, [0, 8000], [0, 0], A);
+  const u = GM.umriss(g); assert.strictEqual(Math.abs(GM.signedArea(u)), 10730 * 8730); assert.strictEqual(GM.rooms(g)[0].flaeche_m2, 80);
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----

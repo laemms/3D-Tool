@@ -35,6 +35,9 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Abgeleitete Daten (Raumkontur, Fläche, Begrenzungen) erzeugt nur der Kern.
 - Jede Änderung: `node test/core.test.js`, `node test/ifc.test.js`, `node build.js`, `python3 test/page_test.py`.
 - Wände: Achse a→b, Dicke `t` (mm), `ts` = Dickenanteil auf der S-Seite (rechts der Laufrichtung im Bildschirm).
+- Höhen kommen aus dem Höhenmodell der Bestandsaufnahme (`GM.hoehen`, wie Raumtool 3D): Geschossniveau (OKFF) als
+  Elevation, Raumhöhe je Raum als IfcSpace-Höhe, Rohdecke als IfcSlab über jedem Geschoss, Bodenplatte nur wenn erfasst.
+  Raumtool 3D übernimmt Niveau und Raumhöhen, die Rohdecke aber nicht aus der IfcSlab (setzt 25 cm; Test 25.11.2026).
 - Raumtrennung ohne Wand (offener Übergang) geht als 2-cm-Wand „Virtuelle Wand“ ins IFC: Raumtool 3D (K12) trennt
   Räume nur an Wänden, ignoriert `IfcVirtualElement` und Wände unter 2 cm (Test 25.11.2026). Kostet je Raum ~0,04 m².
 

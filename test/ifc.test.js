@@ -29,7 +29,11 @@ function check(f, strict) {
 { const o = require('./core.test.js').offen, f = x => exportIFC({ id: 't', geschosse: [o] }, x), n = (t, re) => (t.match(re) || []).length;
   assert.strictEqual(n(f(), /'Raumtrennung Essen \/ Wohnen',\$,'Virtuelle Wand'/g), 1, 'Trennwand für offenen Übergang fehlt');
   assert.strictEqual(n(f({ trennung: 'virtuell' }), /IFCVIRTUALELEMENT/g), 1); assert.strictEqual(n(f({ trennung: 'aus' }), /Raumtrennung/g), 0);
-  console.log('ok  Offener Übergang: Trennwand 2 cm im IFC'); }
+  console.log('ok  Offener Übergang: Trennwand 2 cm im IFC');
+  const t2 = exportIFC({ id: 't', bodenplatte_mm: 250, geschosse: [{ ...o, niveau_mm: -20, rohdecke_mm: 300, geschossHoehe_mm: 2800, lichteHoehe_mm: 2500, raeume: o.raeume.map((r, i) => ({ ...r, hoehe_mm: i ? null : 2590 })) }] });
+  assert.strictEqual(n(t2, /IFCSLAB\(/g), 2, 'Decke und Bodenplatte'); assert.ok(/\.ELEMENT\.,-0\.02\)/.test(t2), 'Niveau aus Höhenmodell');
+  assert.ok(/'LichteHoehe',\$,IFCLENGTHMEASURE\(2\.59\)/.test(t2) && /'LichteHoehe',\$,IFCLENGTHMEASURE\(2\.5\)/.test(t2), 'Raumhöhe je Raum');
+  console.log('ok  Höhen: Niveau, Raumhöhe, Decke und Bodenplatte'); }
 { const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');
