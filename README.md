@@ -52,6 +52,13 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Raumzonen (IfcZone) nach Beheizung: „Unbeheizt“, „Beheizt 20 °C“ … Raumtool 3D übernimmt sie als Raum-Zone.
   Die Konditionierung (beheizt/unbeheizt) übernimmt Raumtool aus der IFC nicht (getestet: Zone, ObjectType,
   Pset_SpaceThermalRequirements); U-Werte setzt Chris in der Heizlast (H73), deshalb keine U-Werte im IFC.
+- Dach v3 – L-, T-, U-Grundrisse (`teileModus: 'auto'`, Standard): `GM.dachTeile` zerlegt den Umriss in Rechtecke (Versätze < 50 cm
+  gebündelt, Reste < 1,5 m Breite oder < 4 m² ohne eigenes Dach). Hauptteil = größtes Rechteck; Anbauten mit First senkrecht zur
+  gemeinsamen Kante, inneres Ende so weit in den Nachbarn verlängert, bis der Giebel unter dessen Dach verschwindet. Sichtbare Flächen =
+  oberste Fläche (konvexe Differenz), dadurch Kehlen. Schmale Streifen: Schleppdach an der Traufseite, Pultdach an der Giebelseite.
+  Giebel und Kniestock nur außen. Bei mehreren Teilen kein Halbraum-Schnitt an Wänden; Kehlbalkenlage je Teil.
+  Raumtool-Test 25.11.2026 (eigenes Testhaus L 12×8 + 5×5 m, ausgebaut): Walmdach Raum 1/2/3 = 93,67/95,02/43,26 m³ (Modell
+  93,84/95,12/43,30), Satteldach 101,88/103,23/46,97 m³ (Modell 102,04/103,40/47,05), Kehlen korrekt, 0 Fehler.
 - Dach v2: Walm- und Zeltdach (First immer längs, Überstand Traufe ringsum; Dachflächen als einzelne IfcSlab .ROOF. im IfcRoof
   HIP_ROOF/PAVILION_ROOF). Ausgebautes Dach („Dach sitzt auf dem obersten Geschoss“): Wände, Räume und Kehlbalkenlage des obersten
   Geschosses werden an der Dachunterseite abgeschnitten (IfcBooleanClippingResult .DIFFERENCE. mit IfcHalfSpaceSolid, Darstellung

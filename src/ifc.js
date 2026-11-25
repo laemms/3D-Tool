@@ -101,7 +101,7 @@
        IfcHalfSpaceSolid, wie Revit und ArchiCAD). body im lokalen System (Ursprung o, Richtung u, IFC-Geschosskoordinaten in m),
        pts = Grundrisspunkte (mm, Modell, schon verschoben), ztop = Oberkante über ±0 (mm). Ergebnis: [Körper, Darstellungstyp] */
     const CLIP = (body, fi, o, u, pts, ztop) => {
-      if (!DA || DA.bezug !== 'boden' || opts.dachSchnitt === false || DA.geschoss !== fs[fi].id) return [body];
+      if (!DA || DA.bezug !== 'boden' || opts.dachSchnitt === false || DA.geschoss !== fs[fi].id || (DA.teile && DA.teile.length > 1)) return [body]; /* mehrteiliges Dach (Kehlen) ist nicht konvex: kein Halbraum-Schnitt */
       const use = DA.ebenen.filter(e => pts.some(([x, y]) => e.a * x + e.b * y + e.c - e.dz < ztop - 5)); if (!use.length) return [body];
       const X = [u[0], u[1], 0], Y = [-u[1], u[0], 0], loc = v => [dot3(v, X), dot3(v, Y), v[2]]; let r = body;
       for (const e of use) { const [x, y] = pts[0], q = [x / 1000 - o[0], -y / 1000 - o[1], (e.a * x + e.b * y + e.c - e.dz - elev[fi]) / 1000], nn = nrm([-e.a, e.b, 1]);
@@ -171,16 +171,21 @@
       if (um.length >= 3 && rd > 0) {
         /* Kehlbalkenlage im ausgebauten Dach: nur der Teil, über dem die Dachunterseite höher als die Decke liegt (Grundriss mit den
            Dachebenen beschnitten – Raumtool 3D übernimmt IfcBooleanClippingResult bei Decken nicht, Test 25.11.2026) */
-        let umK = um; if (DA && DA.bezug === 'boden' && DA.geschoss === f.id && opts.dachSchnitt !== false)
-          for (const e of DA.ebenen) { const v = c => e.a * (c[0] + OFF[0]) + e.b * (c[1] + OFF[1]) + e.c - e.dz - elev[fi] - H, out = [];
-            umK.forEach((c, i) => { const d = umK[(i + 1) % umK.length], vc = v(c), vd = v(d); if (vc >= 0) out.push(c); if ((vc >= 0) !== (vd >= 0)) { const t = vc / (vc - vd); out.push([c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t]); } });
-            umK = out; }
+        const cut = (poly, a, b, c) => { const out = []; poly.forEach((p0, i) => { const p1 = poly[(i + 1) % poly.length], v0 = a * p0[0] + b * p0[1] + c, v1 = a * p1[0] + b * p1[1] + c; if (v0 >= 0) out.push(p0); if ((v0 >= 0) !== (v1 >= 0)) { const t = v0 / (v0 - v1); out.push([p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t]); } }); return out; };
+        let polys = [um];
+        if (DA && DA.bezug === 'boden' && DA.geschoss === f.id && opts.dachSchnitt !== false) {
+          const mehr = DA.teile && DA.teile.length > 1, gruppen = mehr ? DA.teile.map(T => ({ r: T.rect, eb: T.ebenen })) : [{ r: null, eb: DA.ebenen }];
+          polys = gruppen.map(({ r, eb }) => { let q = um;
+            if (r) [[1, 0, -(r[0] - OFF[0])], [-1, 0, r[2] - OFF[0]], [0, 1, -(r[1] - OFF[1])], [0, -1, r[3] - OFF[1]]].forEach(h => { if (q.length >= 3) q = cut(q, ...h); });
+            for (const e of eb) if (q.length >= 3) q = cut(q, e.a, e.b, e.a * OFF[0] + e.b * OFF[1] + e.c - e.dz - elev[fi] - H);
+            return q; }); }
+        polys.forEach((umK, pi) => {
         const kA = umK.length >= 3 ? Math.abs(umK.reduce((s2, c, i) => { const d = umK[(i + 1) % umK.length]; return s2 + c[0] * d[1] - d[0] * c[1]; }, 0)) / 2e6 : 0;
-        if (kA > 0.5) {
+        if (kA <= 0.5) return; const sk = pi ? '|' + pi : '';
         const q = ccw(umK.map(W)), db = EX(q, rd / 1000, (H - rd) / 1000), dt = null;
-        const sl = E(`IFCSLAB(${G('sl|' + f.id)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(db, null, dt)},$,.FLOOR.)`);
-        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id);
-        }
+        const sl = E(`IFCSLAB(${G('sl|' + f.id + sk)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(db, null, dt)},$,.FLOOR.)`);
+        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id + sk);
+        });
       }
       if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) {
         const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + f.id)},${oh},${S('Bodenplatte ' + CM(bp) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);

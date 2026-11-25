@@ -112,6 +112,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <label class="small" for="d-ut">Überstand Traufe cm</label><input id="d-ut" inputmode="decimal">
         <label class="small" for="d-uo">Überstand Ortgang cm</label><input id="d-uo" inputmode="decimal">
         <label class="small" for="d-dicke">Dachaufbau cm</label><input id="d-dicke" inputmode="decimal">
+        <label class="small" for="d-teile">Grundriss</label><select id="d-teile"><option value="auto">in Rechtecke zerlegen (L, T, U, Anbauten)</option><option value="rechteck">ein Rechteck um alles</option></select>
         <label class="small" for="d-bezug">Dach sitzt</label><select id="d-bezug"><option value="decke">auf der obersten Geschossdecke (kalter Dachraum)</option><option value="boden">auf dem obersten Geschoss (ausgebautes Dach)</option></select>
       </div>
       <p class="small" id="d-info"></p>
@@ -360,10 +361,10 @@ function draw2d() {
 
 /* ---------- Seitenleiste ---------- */
 /* ---------- Dach ---------- */
-const DF = [['d-form', 'form'], ['d-neig', 'neigung', 1], ['d-first', 'first'], ['d-knie', 'kniestock', 10], ['d-ut', 'ueberTraufe', 10], ['d-uo', 'ueberOrtgang', 10], ['d-dicke', 'dicke', 10], ['d-bezug', 'bezug']];
-function renderDach() { const d = st.dach || {}; for (const [id, k, f] of DF) { const el = $(id); if (document.activeElement === el) continue; el.value = f ? String(Math.round((d[k] || 0) / f * 10) / 10).replace('.', ',') : d[k]; }
+const DF = [['d-form', 'form'], ['d-neig', 'neigung', 1], ['d-first', 'first'], ['d-knie', 'kniestock', 10], ['d-ut', 'ueberTraufe', 10], ['d-uo', 'ueberOrtgang', 10], ['d-dicke', 'dicke', 10], ['d-bezug', 'bezug'], ['d-teile', 'teileModus']];
+function renderDach() { const d = st.dach || {}; for (const [id, k, f] of DF) { const el = $(id); if (document.activeElement === el) continue; el.value = f ? String(Math.round((d[k] || 0) / f * 10) / 10).replace('.', ',') : (d[k] || (k === 'teileModus' ? 'auto' : '')); }
   const walm = d.form === 'walm' || d.form === 'zelt'; $('d-first').disabled = walm || d.form === 'flach' || d.form === 'kein'; $('d-uo').disabled = walm || d.form === 'kein';
-  const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). Grundriss: Außenumriss als Rechteck.' + (walm ? ' Walm: First längs, Überstand Traufe ringsum.' : '') + (r.bezug === 'boden' ? ' Wände und Räume des Dachgeschosses enden an der Dachunterseite.' : '') : 'Kein Dach im Modell.'; }
+  const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). ' + (r.teile && r.teile.length > 1 ? 'Grundriss in ' + r.teile.length + ' Dachteile zerlegt (Kehlen; schmale Anbauten mit Pult- oder Schleppdach).' : 'Grundriss: Außenumriss als Rechteck.') + (walm ? ' Walm: First längs, Überstand Traufe ringsum.' : '') + (r.bezug === 'boden' ? ' Wände und Räume des Dachgeschosses enden an der Dachunterseite.' : '') : 'Kein Dach im Modell.'; }
 for (const [id, k, f] of DF) $(id).addEventListener('change', e => { const v = f ? num(e.target.value) : e.target.value; if (f && (v == null || v < 0)) { renderDach(); return; } st.dach = { ...st.dach, [k]: f ? Math.round(v * f) : v, gesetzt: true }; st.dirty = true; scheduleSave(); renderDach(); if (st.view === 'haus') draw3d(); });
 /* ---------- Prüfung (wie vor dem Raumtool-Import) ---------- */
 function renderPruefung() {

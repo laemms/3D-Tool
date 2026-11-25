@@ -106,7 +106,15 @@ assert.strictEqual(exportIFC(model, { zeit: Date.UTC(2026, 10, 25), bearbeiter: 
       for (const id in L) { const m = /^IFCARBITRARYCLOSEDPROFILEDEF\(\.AREA\.,\$,#(\d+)\)/.exec(L[id]); if (!m) continue;
         const pts = L[m[1]].match(/#\d+/g).slice(0, -1).map(r => L[r.slice(1)].match(/-?[\d.]+(E-?\d+)?/g).map(Number));
         assert.ok(!crossing(pts), form + ': Profil #' + m[1] + ' überschneidet sich selbst'); } }
-    console.log('ok  Profile ohne Selbstüberschneidung (alle Dachformen)'); }
+    // L-Grundriss: mehrteiliges Dach, jede sichtbare Fläche eine Dachplatte, Profile einfach
+    { let g = { knoten: [], waende: [], oeffnungen: [] }; const L = [[0, 0], [12000, 0], [12000, 8000], [9000, 8000], [9000, 13000], [4000, 13000], [4000, 8000], [0, 8000]];
+      L.forEach((p, i) => { g = GM.edit.addWall(g, p, L[(i + 1) % L.length], { t: 365, ts: 0, ext: true }); });
+      for (const [form, bezug] of [['sattel', 'decke'], ['walm', 'boden']]) { const doc = { id: 'L', geschosse: [{ id: 'eg', name: 'EG', ...g, niveau_mm: 0, geschossHoehe_mm: 2800, rohdecke_mm: 250 }], dach: { form, neigung: 40, kniestock: 500, ueberTraufe: 500, ueberOrtgang: 400, dicke: 300, bezug } };
+        const t = exportIFC(doc), DA = GM.dach(doc, doc.dach), Lx = {}; assert.strictEqual(n(t, /\.ROOF\.\)/g), DA.flaechen.length, 'L: Dachplatten');
+        t.split(/\r?\n/).forEach(l => { const m = /^#(\d+)=(.*);$/.exec(l); if (m) Lx[m[1]] = m[2]; });
+        for (const id in Lx) { const m = /^IFCARBITRARYCLOSEDPROFILEDEF\(\.AREA\.,\$,#(\d+)\)/.exec(Lx[id]); if (!m) continue; const pts = Lx[m[1]].match(/#\d+/g).slice(0, -1).map(r => Lx[r.slice(1)].match(/-?[\d.]+(E-?\d+)?/g).map(Number)); assert.ok(!crossing(pts), 'L ' + form + ': Profil überschneidet sich'); }
+        if (bezug === 'boden') assert.ok(n(t, /'Oberste Geschossdecke/g) >= 1 && !/IFCBOOLEANCLIPPINGRESULT/.test(t), 'L ausgebaut: Kehlbalkenlage je Teil, kein Halbraum-Schnitt'); } }
+    console.log('ok  Profile ohne Selbstüberschneidung (alle Dachformen, L-Grundriss)'); }
   { const { pruefen } = require('../src/ifc.js'), w1 = o.waende.find(w => w.ext && !GM.isHilf(w)), fen = { id: 'f', wand: w1.id, typ: 'fenster', abstand: 1000, breite: 1000, hoehe: 1200, brh: 900 };
     const mk = bezug => ({ id: 't', geschosse: [{ ...o, oeffnungen: [fen], niveau_mm: 0, geschossHoehe_mm: 2800, rohdecke_mm: 250 }], dach: { form: 'walm', neigung: 45, kniestock: 1000, ueberTraufe: 400, dicke: 250, bezug } });
     assert.ok(pruefen(mk('boden')).some(x => /Dachschräge/.test(x.text)), 'Fenster in der Dachschräge nicht gemeldet'); assert.ok(!pruefen(mk('decke')).some(x => /Dachschräge/.test(x.text)));

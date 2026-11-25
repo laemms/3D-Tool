@@ -149,6 +149,25 @@ t('Dach: Walm- und Zeltdach, Dachunterseite', () => {
   assert.ok(Math.abs(GM.dachUnten(r, cx, cy) - (r.firsthoehe - dz)) < 2, 'Unterseite unter dem First'); assert.ok(Math.abs(GM.dachUnten(r, cx, Math.min(...ys)) - (2800 - dz)) < 2, 'Unterseite an der Traufe');
   assert.strictEqual(GM.dachUnten(null, 0, 0), Infinity); assert.strictEqual(GM.dach(doc, { ...d, bezug: 'boden' }).bezug, 'boden');
 });
+t('Dach auf L-, T- und U-Grundriss: Teile, Kehlen, keine Überlappung', () => {
+  const haus = pts => { let g = { knoten: [], waende: [], oeffnungen: [] }; pts.forEach((p, i) => { g = GM.edit.addWall(g, p, pts[(i + 1) % pts.length], { t: 365, ts: 0, ext: true }); }); return g; };
+  const formen = { L: [[0, 0], [12000, 0], [12000, 8000], [9000, 8000], [9000, 13000], [4000, 13000], [4000, 8000], [0, 8000]], U: [[0, 0], [16000, 0], [16000, 13000], [11000, 13000], [11000, 8000], [5000, 8000], [5000, 13000], [0, 13000]],
+    Ecke: [[0, 0], [12000, 0], [12000, 14000], [6000, 14000], [6000, 8000], [0, 8000]], Kerbe: [[0, 0], [10000, 0], [10000, 8000], [0, 8000], [0, 4300], [150, 4300], [150, 4000], [0, 4000]] };
+  const inP = (q, x, y) => { let c = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) { const [a, b] = q[i], [e, f] = q[j]; if ((b > y) !== (f > y) && x < (e - a) * (y - b) / (f - b) + a) c = !c; } return c; };
+  for (const [name, pts] of Object.entries(formen)) for (const form of ['sattel', 'walm']) {
+    const doc = { geschosse: [{ id: 'eg', name: 'EG', ...haus(pts), niveau_mm: 0, geschossHoehe_mm: 2800 }] }, d = { form, neigung: 40, kniestock: 0, ueberTraufe: 500, ueberOrtgang: 400, dicke: 300, bezug: 'decke' };
+    const r = GM.dach(doc, d), soll = { L: 2, U: 3, Ecke: 2, Kerbe: 1 }[name]; assert.strictEqual(r.teile.length, soll, name + ': Dachteile');
+    // jeder Punkt unter dem Dach liegt unter genau einer Fläche (Grundrissprojektion), und die Fläche liegt dort oben
+    let n = 0; for (let x = -800; x < 17000; x += 337) for (let y = -800; y < 15000; y += 331) { const hits = r.flaechen.filter(q => inP(q, x, y)); if (!hits.length) continue; n++;
+      assert.strictEqual(hits.length, 1, name + '/' + form + ': ' + hits.length + ' Flächen über ' + x + '/' + y); }
+    assert.ok(n > 200, 'zu wenig Dachfläche');
+    if (name === 'L' && form === 'sattel') { const zr = 2800 + 2865 * Math.tan(40 * Math.PI / 180) - 300 / Math.cos(40 * Math.PI / 180); assert.ok(Math.abs(GM.dachUnten(r, 6500, 11000) - zr) < 3, 'Unterseite unter dem Anbau-First');
+      assert.strictEqual(r.waende.filter(w => /Giebel/.test(w.name)).length, 3, 'Giebel nur außen'); }
+  }
+  // Rechteck-Modus wie bisher
+  const doc = { geschosse: [{ id: 'eg', name: 'EG', ...haus(formen.L), niveau_mm: 0, geschossHoehe_mm: 2800 }] };
+  assert.strictEqual(GM.dach(doc, { form: 'sattel', neigung: 40, teileModus: 'rechteck', dicke: 300 }).teile.length, 1);
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----

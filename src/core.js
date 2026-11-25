@@ -347,56 +347,139 @@
     // über allen Räumen liegt laut Bestandsaufnahme ein beheizter Raum (z. B. Wohnung im Mehrfamilienhaus): kein Dach im Modell
     const oben = (top.raeume || []).length && (top.raeume || []).every(r => r.decke && r.decke.grenzt === 'raum');
     return { form: oben ? 'kein' : 'sattel', neigung: Number((p.objekt || {}).dachneigung) || 35, first: 'lang', kniestock: 0, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: dg ? 'boden' : 'decke' }; }
+  /* Grundriss in Rechtecke zerlegen (für Dächer auf L-, T- oder U-Grundrissen): Koordinaten mit kleinen Versätzen (< tol) bündeln,
+     Rasterzellen im Umriss sammeln, dann wiederholt das größte freie Rechteck nehmen. Kleine Reste (Erker, Nischen) bleiben ohne Dachteil. */
+  function dachTeile(u, tol = 500) {
+    if (!u || u.length < 3) return [];
+    const bund = vs => { const s = [...new Set(vs.map(v => Math.round(v)))].sort((p, q) => p - q), g = [[s[0]]]; s.slice(1).forEach(v => (v - g[g.length - 1][g[g.length - 1].length - 1] <= tol ? g[g.length - 1].push(v) : g.push([v])));
+      return g.map((x, i) => (i === 0 ? x[0] : i === g.length - 1 ? x[x.length - 1] : (x[0] + x[x.length - 1]) / 2)); };
+    const X = bund(u.map(q => q[0])), Y = bund(u.map(q => q[1])), nx = X.length - 1, ny = Y.length - 1;
+    const inPoly = (x, y) => { let c = false; for (let i = 0, j = u.length - 1; i < u.length; j = i++) { const [a, b] = u[i], [e, f] = u[j]; if ((b > y) !== (f > y) && x < (e - a) * (y - b) / (f - b) + a) c = !c; } return c; };
+    const cell = []; for (let i = 0; i < nx; i++) { cell.push([]); for (let j = 0; j < ny; j++) cell[i].push(inPoly((X[i] + X[i + 1]) / 2, (Y[j] + Y[j + 1]) / 2) ? 1 : 0); }
+    const teile = [];
+    for (let n = 0; n < 4; n++) { let best = null;
+      for (let i0 = 0; i0 < nx; i0++) for (let j0 = 0; j0 < ny; j0++) for (let i1 = i0; i1 < nx; i1++) { if (!cell[i1][j0]) break; for (let j1 = j0; j1 < ny; j1++) {
+        let ok = true; for (let i = i0; i <= i1 && ok; i++) if (cell[i][j1] !== 1) ok = false; if (!ok) break;
+        let full = true; for (let i = i0; i <= i1 && full; i++) for (let j = j0; j <= j1; j++) if (cell[i][j] !== 1) { full = false; break; } if (!full) break;
+        const w = X[i1 + 1] - X[i0], h = Y[j1 + 1] - Y[j0]; if (!best || w * h > best.A) best = { A: w * h, i0, i1, j0, j1, w, h }; } }
+      if (!best || Math.min(best.w, best.h) < 1500 || best.A < 4e6) break;
+      for (let i = best.i0; i <= best.i1; i++) for (let j = best.j0; j <= best.j1; j++) cell[i][j] = 2;
+      teile.push({ x0: X[best.i0], y0: Y[best.j0], x1: X[best.i1 + 1], y1: Y[best.j1 + 1] }); }
+    return teile;
+  }
+
+  // konvexes Polygon (2D-Punkte [x,y,...]) an der Halbebene a·x + b·y + c ≥ 0 abschneiden; z wird linear mitgeführt
+  function halbebene(poly, a, b, c) { const out = []; poly.forEach((p, i) => { const q = poly[(i + 1) % poly.length], vp = a * p[0] + b * p[1] + c, vq = a * q[0] + b * q[1] + c;
+    if (vp >= 0) out.push(p); if ((vp >= 0) !== (vq >= 0)) { const t = vp / (vp - vq); out.push(p.map((v, k) => v + (q[k] - v) * t)); } }); return out; }
+  const flaecheXY = q => Math.abs(q.reduce((s, p, i) => { const r = q[(i + 1) % q.length]; return s + p[0] * r[1] - r[0] * p[1]; }, 0)) / 2;
+  const sauber = q => { let r = q.filter((p, i) => Math.hypot(p[0] - q[(i + 1) % q.length][0], p[1] - q[(i + 1) % q.length][1], p[2] - q[(i + 1) % q.length][2]) > 2);
+    r = r.filter((p, i) => { const a = r[(i + r.length - 1) % r.length], b = r[(i + 1) % r.length], cx = (p[1] - a[1]) * (b[2] - a[2]) - (p[2] - a[2]) * (b[1] - a[1]), cy = (p[2] - a[2]) * (b[0] - a[0]) - (p[0] - a[0]) * (b[2] - a[2]), cz = (p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0]);
+      return Math.hypot(cx, cy, cz) > 1e3 * Math.max(1, Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])) * 1e-3 * 2; }); return r; };
+  const ebeneVon = (f, dk) => { const [p0, p1] = f, p2 = f.find((q, i) => i > 1 && Math.abs((p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0])) > 1) || f[2];
+    const det = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]), a = ((p1[2] - p0[2]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[2] - p0[2])) / det, b = ((p1[0] - p0[0]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[0] - p0[0])) / det;
+    return { a, b, c: p0[2] - a * p0[0] - b * p0[1], dz: dk * Math.hypot(1, a, b) }; };
+
   function dach(doc, d) {
     if (!d || d.form === 'kein') return null;
     const fs = (doc.geschosse || []).filter(f => (f.waende || []).some(w => !isHilf(w))); if (!fs.length) return null;
     const top = fs[fs.length - 1], stp = stapeln((doc.geschosse || []).map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })))[top.id] || { dx: 0, dy: 0 };
     const u = umriss(top); if (u.length < 3) return null;
-    const xs = u.map(q => q[0] + stp.dx), ys = u.map(q => q[1] + stp.dy); let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const us = u.map(q => [q[0] + stp.dx, q[1] + stp.dy]), xs = us.map(q => q[0]), ys = us.map(q => q[1]);
     const H = top.geschossHoehe_mm || 2800, niv = top.niveau_mm || 0, zb = d.bezug === 'boden' ? niv : niv + H, ze = zb + (Number(d.kniestock) || 0);
     const t = Math.tan(Math.max(0, Math.min(75, Number(d.neigung) || 0)) * Math.PI / 180), ut = Number(d.ueberTraufe) || 0, uo = Number(d.ueberOrtgang) || 0;
-    const tw = Math.max(...top.waende.filter(w => w.ext && !isHilf(w)).map(w => w.t), 240);
-    // First entlang x (Traufen an y0/y1) oder entlang y; intern immer „First entlang a“, b = quer dazu
-    const walm = d.form === 'walm' || d.form === 'zelt', alongX = walm ? (x1 - x0) >= (y1 - y0) : (d.first === 'quer') !== ((x1 - x0) >= (y1 - y0)); /* Walm: First immer längs */
-    const P = (a, b, z) => (alongX ? [a, b, z] : [b, a, z]), A0 = alongX ? x0 : y0, A1 = alongX ? x1 : y1, B0 = alongX ? y0 : x0, B1 = alongX ? y1 : x1, bm = (B0 + B1) / 2;
-    const flaechen = [], waende = [];
-    if (d.form === 'flach') {
-      flaechen.push([P(A0 - uo, B0 - ut, ze), P(A1 + uo, B0 - ut, ze), P(A1 + uo, B1 + ut, ze), P(A0 - uo, B1 + ut, ze)]);
-      if (d.bezug !== 'boden' && ze > zb + 10) [[A0, B0, A1, B0], [A1, B0, A1, B1], [A1, B1, A0, B1], [A0, B1, A0, B0]].forEach(([a0, b0, a1, b1]) => waende.push(['Kniestock', [P(a0, b0, zb), P(a1, b1, zb), P(a1, b1, ze), P(a0, b0, ze)]]));
-    } else if (d.form === 'pult') {
-      const zAt = b => ze + (b - B0) * t;
-      flaechen.push([P(A0 - uo, B0 - ut, zAt(B0 - ut)), P(A1 + uo, B0 - ut, zAt(B0 - ut)), P(A1 + uo, B1 + ut, zAt(B1 + ut)), P(A0 - uo, B1 + ut, zAt(B1 + ut))]);
-      if (d.bezug !== 'boden') {
-        if (ze > zb + 10) waende.push(['Kniestock', [P(A0, B0, zb), P(A1, B0, zb), P(A1, B0, ze), P(A0, B0, ze)]]);
-        waende.push(['Außenwand Hochseite', [P(A1, B1, zb), P(A0, B1, zb), P(A0, B1, zAt(B1)), P(A1, B1, zAt(B1))]]);
-        waende.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, B1, zAt(B1))]]);
-        waende.push(['Giebelwand', [P(A1, B0, zb), P(A1, B1, zb), P(A1, B1, zAt(B1)), P(A1, B0, ze)]]);
+    const tw = Math.max(...top.waende.filter(w => w.ext && !isHilf(w)).map(w => w.t), 240), dk = Number(d.dicke) || 250;
+    const walm = d.form === 'walm' || d.form === 'zelt';
+    // Dachteile: ein Rechteck über alles (wie bisher) oder Zerlegung des Umrisses (L-, T-, U-Grundriss)
+    let rects = d.teileModus === 'rechteck' ? [] : dachTeile(us);
+    if (rects.length < 2 || d.form === 'flach') rects = [{ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }];
+    const teile = [], E = 50;
+    rects.forEach((r, i) => { const lx = r.x1 - r.x0, ly = r.y1 - r.y0; let alongX, innen = null, nb = null;
+      if (i === 0) alongX = walm ? lx >= ly : (d.first === 'quer') !== (lx >= ly);
+      else { // Anbau: First senkrecht zur längsten gemeinsamen Kante mit einem schon gesetzten Teil
+        let bestL = 0; teile.forEach(q => { const R = q.r, ox = Math.min(r.x1, R.x1) - Math.max(r.x0, R.x0), oy = Math.min(r.y1, R.y1) - Math.max(r.y0, R.y0);
+          if (oy > bestL && Math.abs(r.x0 - R.x1) < E) { bestL = oy; innen = 'x0'; nb = q; } if (oy > bestL && Math.abs(r.x1 - R.x0) < E) { bestL = oy; innen = 'x1'; nb = q; }
+          if (ox > bestL && Math.abs(r.y0 - R.y1) < E) { bestL = ox; innen = 'y0'; nb = q; } if (ox > bestL && Math.abs(r.y1 - R.y0) < E) { bestL = ox; innen = 'y1'; nb = q; } });
+        alongX = innen ? innen[0] === 'x' : lx >= ly;
+        // schmaler Streifen am Nachbarn (Vorbau, Abseite): Schleppdach an der Traufseite des Nachbarn, Pultdach an dessen Giebelseite
+        if (innen && d.form !== 'flach') { const proj = innen[0] === 'x' ? lx : ly, along = innen[0] === 'x' ? ly : lx;
+          if (proj < 2500 || proj < 0.4 * along) { const parallel = nb.alongX === (innen[0] === 'y'); teile.push({ r, alongX: innen[0] === 'y', kontakt: innen, nb, typ: parallel ? 'schlepp' : 'pult', hoch: innen[1] === '0' ? 'b0' : 'b1', ext: 0 }); return; } } }
+      teile.push({ r, alongX, innen, nb, ext: 0 }); });
+    // Fläche(n) eines Teils; das innere Ende (am Nachbarn) läuft um ext in den Nachbarn hinein, ohne Überstand, ohne Walm, ohne Giebelwand
+    const bauen = T => { const { r, alongX } = T, P = (a, b, z) => (alongX ? [a, b, z] : [b, a, z]);
+      const A0 = alongX ? r.x0 : r.y0, A1 = alongX ? r.x1 : r.y1, B0 = alongX ? r.y0 : r.x0, B1 = alongX ? r.y1 : r.x1, bm = (B0 + B1) / 2;
+      const in0 = T.innen === (alongX ? 'x0' : 'y0'), in1 = T.innen === (alongX ? 'x1' : 'y1'), a0e = in0 ? A0 - T.ext : A0, a1e = in1 ? A1 + T.ext : A1;
+      const o0 = in0 ? 0 : walm ? ut : uo, o1 = in1 ? 0 : walm ? ut : uo, fl = [], wa = [], fp = alongX ? [a0e - o0, B0 - ut, a1e + o1, B1 + ut] : [B0 - ut, a0e - o0, B1 + ut, a1e + o1];
+      const kn = (p0, q0, p1, q1, side) => wa.push(['Kniestock', [P(p0, q0, zb), P(p1, q1, zb), P(p1, q1, ze), P(p0, q0, ze)], side]);
+      if (T.typ) { // Streifen: Pult- oder Schleppdach, hohe Seite am Nachbarn, kein Überstand zum Nachbarn hin
+        const hb0 = T.hoch === 'b0', bLo = hb0 ? B1 + ut : B0 - ut, bHi = hb0 ? B0 : B1; let zAt;
+        if (T.typ === 'schlepp') { const N = T.nb, mx = alongX ? [(A0 + A1) / 2, hb0 ? B0 - 100 : B1 + 100] : [hb0 ? B0 - 100 : B1 + 100, (A0 + A1) / 2], pick = N.eb.reduce((m, e) => (e.a * mx[0] + e.b * mx[1] + e.c < m.a * mx[0] + m.b * mx[1] + m.c ? e : m));
+          zAt = (a, b) => { const [x, y] = alongX ? [a, b] : [b, a]; return pick.a * x + pick.b * y + pick.c; }; }
+        else zAt = (a, b) => ze + (hb0 ? B1 - b : b - B0) * t;
+        const q = [[A0 - uo, bLo], [A1 + uo, bLo], [A1 + uo, bHi], [A0 - uo, bHi]];
+        fl.push(q.map(([a, b]) => P(a, b, zAt(a, b))));
+        if (d.bezug !== 'boden' && T.typ === 'pult' && ze > zb + 10) kn(A0, hb0 ? B1 : B0, A1, hb0 ? B1 : B0, hb0 ? 'b1' : 'b0');
+        T.fl = fl; T.wa = wa; T.fp = alongX ? [A0 - uo, Math.min(bLo, bHi), A1 + uo, Math.max(bLo, bHi)] : [Math.min(bLo, bHi), A0 - uo, Math.max(bLo, bHi), A1 + uo]; T.eb = fl.map(f => ebeneVon(f, dk)); T.A = [A0, A1, B0, B1]; return; }
+      if (d.form === 'flach') {
+        fl.push([P(A0 - uo, B0 - ut, ze), P(A1 + uo, B0 - ut, ze), P(A1 + uo, B1 + ut, ze), P(A0 - uo, B1 + ut, ze)]);
+        if (d.bezug !== 'boden' && ze > zb + 10) [[A0, B0, A1, B0], [A1, B0, A1, B1], [A1, B1, A0, B1], [A0, B1, A0, B0]].forEach(([p0, q0, p1, q1]) => kn(p0, q0, p1, q1));
+      } else if (d.form === 'pult') {
+        const zAt = b => ze + (b - B0) * t;
+        fl.push([P(a0e - o0, B0 - ut, zAt(B0 - ut)), P(a1e + o1, B0 - ut, zAt(B0 - ut)), P(a1e + o1, B1 + ut, zAt(B1 + ut)), P(a0e - o0, B1 + ut, zAt(B1 + ut))]);
+        if (d.bezug !== 'boden') {
+          if (ze > zb + 10) kn(A0, B0, A1, B0, 'b0');
+          wa.push(['Außenwand Hochseite', [P(A1, B1, zb), P(A0, B1, zb), P(A0, B1, zAt(B1)), P(A1, B1, zAt(B1))], 'b1']);
+          if (!in0) wa.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, B1, zAt(B1))]]);
+          if (!in1) wa.push(['Giebelwand', [P(A1, B0, zb), P(A1, B1, zb), P(A1, B1, zAt(B1)), P(A1, B0, ze)]]);
+        }
+      } else if (walm) { /* Walm- und Zeltdach: Traufe ringsum gleich hoch, Überstand Traufe auf allen Seiten; am inneren Ende kein Walm */
+        const a0 = in0 ? a0e : A0 - ut, a1 = in1 ? a1e : A1 + ut, b0 = B0 - ut, b1 = B1 + ut, zt = ze - ut * t, hb = (b1 - b0) / 2, zr = zt + hb * t;
+        let r0 = in0 ? a0 : a0 + hb, r1 = in1 ? a1 : a1 - hb; if (!in0 && !in1 && (d.form === 'zelt' || r1 - r0 < 10)) r0 = r1 = (a0 + a1) / 2; if (r1 < r0) r0 = r1 = in0 ? Math.max(a0, r1) : Math.min(a1, r0);
+        const zp = r1 - r0 < 10 && !in0 && !in1 ? zt + Math.min(hb, (a1 - a0) / 2) * t : zr;
+        const L1 = [P(a0, b0, zt), P(a1, b0, zt), P(r1, bm, zp)], L2 = [P(a1, b1, zt), P(a0, b1, zt), P(r0, bm, zp)];
+        if (r1 > r0 + 1) { L1.push(P(r0, bm, zp)); L2.push(P(r1, bm, zp)); }
+        fl.push(L1, L2); if (!in0) fl.push([P(a0, b1, zt), P(a0, b0, zt), P(r0, bm, zp)]); if (!in1) fl.push([P(a1, b0, zt), P(a1, b1, zt), P(r1, bm, zp)]);
+        if (d.bezug !== 'boden' && ze > zb + 10) { kn(A0, B0, A1, B0, 'b0'); kn(A1, B1, A0, B1, 'b1'); if (!in1) kn(A1, B0, A1, B1, 'a1'); if (!in0) kn(A0, B1, A0, B0, 'a0'); }
+      } else { // Satteldach
+        const zr = ze + (bm - B0) * t, zt = ze - ut * t;
+        fl.push([P(a0e - o0, B0 - ut, zt), P(a1e + o1, B0 - ut, zt), P(a1e + o1, bm, zr), P(a0e - o0, bm, zr)]);
+        fl.push([P(a0e - o0, B1 + ut, zt), P(a1e + o1, B1 + ut, zt), P(a1e + o1, bm, zr), P(a0e - o0, bm, zr)]);
+        if (d.bezug !== 'boden') {
+          if (ze > zb + 10) { kn(A0, B0, A1, B0, 'b0'); kn(A1, B1, A0, B1, 'b1'); }
+          if (!in0) wa.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, bm, zr), P(A0, B1, ze)]]);
+          if (!in1) wa.push(['Giebelwand', [P(A1, B0, zb), P(A1, B1, zb), P(A1, B1, ze), P(A1, bm, zr), P(A1, B0, ze)]]);
+        }
       }
-    } else if (walm) { /* Walm- und Zeltdach: Traufe ringsum gleich hoch, Überstand Traufe auf allen Seiten */
-      const a0 = A0 - ut, a1 = A1 + ut, b0 = B0 - ut, b1 = B1 + ut, zt = ze - ut * t, hb = (b1 - b0) / 2, zr = zt + hb * t;
-      let r0 = a0 + hb, r1 = a1 - hb; if (d.form === 'zelt' || r1 - r0 < 10) r0 = r1 = (a0 + a1) / 2;
-      const zp = r1 - r0 < 10 ? zt + Math.min(hb, (a1 - a0) / 2) * t : zr; /* Zeltdach auf Rechteck: Spitze über der Mitte, die steileren Seiten bestimmen die Höhe */
-      const L1 = [P(a0, b0, zt), P(a1, b0, zt), P(r1, bm, zp)], L2 = [P(a1, b1, zt), P(a0, b1, zt), P(r0, bm, zp)];
-      if (r1 > r0) { L1.push(P(r0, bm, zp)); L2.push(P(r1, bm, zp)); }
-      flaechen.push(L1, L2, [P(a0, b1, zt), P(a0, b0, zt), P(r0, bm, zp)], [P(a1, b0, zt), P(a1, b1, zt), P(r1, bm, zp)]);
-      if (d.bezug !== 'boden' && ze > zb + 10) [[A0, B0, A1, B0], [A1, B0, A1, B1], [A1, B1, A0, B1], [A0, B1, A0, B0]].forEach(([p0, q0, p1, q1]) => waende.push(['Kniestock', [P(p0, q0, zb), P(p1, q1, zb), P(p1, q1, ze), P(p0, q0, ze)]]));
-    } else { // Satteldach
-      const zr = ze + (bm - B0) * t, zt = ze - ut * t;
-      flaechen.push([P(A0 - uo, B0 - ut, zt), P(A1 + uo, B0 - ut, zt), P(A1 + uo, bm, zr), P(A0 - uo, bm, zr)]);
-      flaechen.push([P(A0 - uo, B1 + ut, zt), P(A1 + uo, B1 + ut, zt), P(A1 + uo, bm, zr), P(A0 - uo, bm, zr)]);
-      if (d.bezug !== 'boden') {
-        if (ze > zb + 10) { waende.push(['Kniestock', [P(A0, B0, zb), P(A1, B0, zb), P(A1, B0, ze), P(A0, B0, ze)]]); waende.push(['Kniestock', [P(A1, B1, zb), P(A0, B1, zb), P(A0, B1, ze), P(A1, B1, ze)]]); }
-        waende.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, bm, zr), P(A0, B1, ze)]]);
-        waende.push(['Giebelwand', [P(A1, B0, zb), P(A1, B1, zb), P(A1, B1, ze), P(A1, bm, zr), P(A1, B0, ze)]]);
-      }
-    }
-    const R = q => q.map(v => Math.round(v)), dk = Number(d.dicke) || 250, dz = d.form === 'flach' ? dk : dk / Math.cos(Math.atan(t));
-    // Wände enden an der Dachunterseite (Dachfläche = Oberseite)
+      T.fl = fl; T.wa = wa; T.fp = fp; T.eb = fl.map(f => ebeneVon(f, dk)); T.A = [A0, A1, B0, B1]; };
+    // Oberfläche eines Teils (Minimum seiner Ebenen) innerhalb seines Fußabdrucks, sonst -Infinity
+    const zTeil = (T, x, y) => (x >= T.fp[0] - 1 && x <= T.fp[2] + 1 && y >= T.fp[1] - 1 && y <= T.fp[3] + 1 ? Math.min(...T.eb.map(e => e.a * x + e.b * y + e.c)) : -Infinity);
+    teile.forEach((T, i) => { bauen(T); if (!T.innen || !T.nb) return;
+      // inneres Ende so weit in den Nachbarn verlängern, bis der Giebel ganz unter dessen Dach verschwindet
+      const N = T.nb.r, depth = T.innen === 'x0' ? N.x1 - N.x0 : T.innen === 'x1' ? N.x1 - N.x0 : N.y1 - N.y0;
+      for (let ext = 0; ext <= depth; ext += 100) { T.ext = ext; bauen(T);
+        const [A0, A1, B0, B1] = T.A, a = T.innen === (T.alongX ? 'x0' : 'y0') ? A0 - ext : A1 + ext, pts = [];
+        for (let k = 0; k <= 20; k++) { const b = B0 + (B1 - B0) * k / 20; pts.push(T.alongX ? [a, b] : [b, a]); }
+        if (pts.every(([x, y]) => { const zo = Math.max(...teile.slice(0, i).map(Q => zTeil(Q, x, y))); return zTeil(T, x, y) <= zo + 1; })) break; } });
+    // sichtbare Teile der Flächen: was unter dem Dach eines anderen Teils liegt, fällt weg (konvexe Differenz)
+    const flaechen = [], ebenen = [];
+    teile.forEach((T, i) => T.fl.forEach((f, k) => { const e = T.eb[k]; let stuecke = [f];
+      if (T.innen && T.nb) { // Verlängerung im Nachbarn: seitlich auf dessen Fußabdruck begrenzen (sonst Streifen neben dessen Ortgang)
+        const r = T.r, fp = T.nb.fp, g = { x0: [1, 0, -r.x0], x1: [-1, 0, r.x1], y0: [0, 1, -r.y0], y1: [0, -1, r.y1] }[T.innen], aussen = halbebene(f, ...g), innen0 = halbebene(f, -g[0], -g[1], -g[2]);
+        let innen = innen0; [[1, 0, -fp[0]], [-1, 0, fp[2]], [0, 1, -fp[1]], [0, -1, fp[3]]].forEach(h => { if (innen.length >= 3) innen = halbebene(innen, ...h); });
+        stuecke = [aussen, innen].filter(q => q.length >= 3 && flaecheXY(q) > 1e4); }
+      teile.forEach((Q, j) => { if (j === i) return; const eps = j < i ? 1 : -1, hs = [[1, 0, -Q.fp[0]], [-1, 0, Q.fp[2]], [0, 1, -Q.fp[1]], [0, -1, Q.fp[3]], ...Q.eb.map(g => [g.a - e.a, g.b - e.b, g.c - e.c + eps])];
+        const neu = []; stuecke.forEach(p => { let rest = p; for (const [a, b, c] of hs) { const aus = halbebene(rest, -a, -b, -c); if (aus.length >= 3 && flaecheXY(aus) > 1e4) neu.push(aus); rest = halbebene(rest, a, b, c); if (rest.length < 3) break; } });
+        stuecke = neu; });
+      stuecke.map(sauber).filter(q => q.length >= 3 && flaecheXY(q) > 5e4).forEach(q => { flaechen.push(q); ebenen.push(e); }); }));
+    // Wände: Kniestock nur außen (Spannen anderer Teile abziehen), Giebel nur an äußeren Enden; Oberkante an der Dachunterseite
+    const dz = d.form === 'flach' ? dk : dk / Math.cos(Math.atan(t)), waende = [];
+    teile.forEach((T, i) => T.wa.forEach(([name, f]) => {
+      if (name !== 'Kniestock' || teile.length < 2) { waende.push([name, f]); return; }
+      const ax = Math.abs(f[0][1] - f[1][1]) < 1 ? 0 : 1, c = f[0][1 - ax], lo = Math.min(f[0][ax], f[1][ax]), hi = Math.max(f[0][ax], f[1][ax]); let iv = [[lo, hi]];
+      teile.forEach((Q, j) => { if (j === i) return; const R = Q.r, [q0, q1, c0, c1] = ax === 0 ? [R.x0, R.x1, R.y0, R.y1] : [R.y0, R.y1, R.x0, R.x1]; if (c < c0 - E || c > c1 + E) return;
+        iv = iv.flatMap(([s, e2]) => [[s, Math.min(e2, q0)], [Math.max(s, q1), e2]].filter(([p, q]) => q - p > 100)); });
+      iv.forEach(([s, e2]) => { const pt = (v, z) => (ax === 0 ? [v, c, z] : [c, v, z]); waende.push([name, [pt(s, zb), pt(e2, zb), pt(e2, ze), pt(s, ze)]]); }); }));
+    const R = q => q.map(v => Math.round(v));
     const wl = waende.map(([name, f]) => { const g = f.map(q => (q[2] > zb + 1 ? [q[0], q[1], Math.max(zb, q[2] - dz)] : q)).filter((q, i, a) => { const r = a[(i + 1) % a.length]; return Math.hypot(q[0] - r[0], q[1] - r[1], q[2] - r[2]) > 1; }); return { name, pts: g }; }).filter(w => w.pts.length >= 3 && w.pts.some(q => q[2] > zb + 1));
-    // Ebenen der Dachoberseiten z = a·x + b·y + c (mm) mit lotrechter Dicke dz: die Dachunterseite ist das Minimum über alle Ebenen (konvexes Dach)
-    const ebenen = flaechen.map(f => { const [p0, p1] = f, p2 = f.find((q, i) => i > 1 && Math.abs((p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0])) > 1);
-      const det = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]), a = ((p1[2] - p0[2]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[2] - p0[2])) / det, b = ((p1[0] - p0[0]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[0] - p0[0])) / det;
-      return { a, b, c: p0[2] - a * p0[0] - b * p0[1], dz: dk * Math.hypot(1, a, b) }; });
     /* Dachflächenfenster: auf Fläche k, Mitte längs der Traufe (ab erster Traufecke), Unterkante über Rohfußboden des obersten
        Geschosses (an der Dachunterseite gemessen), Breite × Höhe (Höhe entlang der Schräge) */
     const fenster = d.form === 'flach' ? [] : (d.fenster || []).map((w, i) => { const k = w.flaeche | 0, q = flaechen[k], Eb = ebenen[k]; if (!q || !Eb) return null;
@@ -407,11 +490,18 @@
       const at = (sx, tx) => [p0[0] + e[0] * sx + uu[0] * tx, p0[1] + e[1] * sx + uu[1] * tx, p0[2] + uu[2] * tx];
       let n = [e[1] * uu[2] - e[2] * uu[1], e[2] * uu[0] - e[0] * uu[2], e[0] * uu[1] - e[1] * uu[0]]; if (n[2] < 0) n = n.map(v => -v);
       return { id: w.id || 'df' + (i + 1), flaeche: k, breite: B, hoehe: Hh, e, u: uu, n, ecken: [at(m - B / 2, t0), at(m + B / 2, t0), at(m + B / 2, t0 + Hh), at(m - B / 2, t0 + Hh)], laenge: L }; }).filter(Boolean);
-    return { form: d.form, bezug: d.bezug === 'boden' ? 'boden' : 'decke', ebenen, fenster, geschoss: top.id, dicke: dk, wanddicke: tw, flaechen: flaechen.map(f => f.map(R)), waende: wl.map(w => ({ name: w.name, pts: w.pts.map(R) })), firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
+    return { form: d.form, bezug: d.bezug === 'boden' ? 'boden' : 'decke', ebenen, fenster, geschoss: top.id, dicke: dk, wanddicke: tw, flaechen: flaechen.map(f => f.map(R)), waende: wl.map(w => ({ name: w.name, pts: w.pts.map(R) })),
+      teile: teile.map(T => ({ rect: [T.r.x0, T.r.y0, T.r.x1, T.r.y1].map(Math.round), fp: T.fp.map(Math.round), first: T.alongX ? 'x' : 'y', innen: T.innen, ebenen: T.eb })),
+      firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
   }
 
   /* Höhe der Dachunterseite über ±0 an einem Punkt (mm, Modellkoordinaten); Infinity ohne Dach */
-  function dachUnten(DA, x, y) { return DA && DA.ebenen && DA.ebenen.length ? Math.min(...DA.ebenen.map(e => e.a * x + e.b * y + e.c - e.dz)) : Infinity; }
-  const api = { dachUnten, dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  function dachUnten(DA, x, y) {
+    if (!DA || !DA.ebenen || !DA.ebenen.length) return Infinity;
+    if (!DA.teile || DA.teile.length < 2) return Math.min(...DA.ebenen.map(e => e.a * x + e.b * y + e.c - e.dz));
+    // mehrere Dachteile: höchste Unterseite der Teile, die den Punkt überdecken (Kehlen = Maximum)
+    const z = DA.teile.filter(T => x >= T.fp[0] - 1 && x <= T.fp[2] + 1 && y >= T.fp[1] - 1 && y <= T.fp[3] + 1).map(T => Math.min(...T.ebenen.map(e => e.a * x + e.b * y + e.c - e.dz)));
+    return z.length ? Math.max(...z) : Infinity; }
+  const api = { dachTeile, dachUnten, dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
