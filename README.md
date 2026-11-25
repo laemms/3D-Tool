@@ -55,7 +55,17 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Dach v2: Walm- und Zeltdach (First immer längs, Überstand Traufe ringsum; Dachflächen als einzelne IfcSlab .ROOF. im IfcRoof
   HIP_ROOF/PAVILION_ROOF). Ausgebautes Dach („Dach sitzt auf dem obersten Geschoss“): Wände, Räume und Kehlbalkenlage des obersten
   Geschosses werden an der Dachunterseite abgeschnitten (IfcBooleanClippingResult .DIFFERENCE. mit IfcHalfSpaceSolid, Darstellung
-  'Clipping'); `dachSchnitt: false` schaltet das ab. Dachunterseite = Minimum der Dachebenen (`GM.dachUnten`). In Raumtool 3D noch zu testen.
+  'Clipping'); `dachSchnitt: false` schaltet das ab. Dachunterseite = Minimum der Dachebenen (`GM.dachUnten`).
+- Raumtool 3D, Test 25.11.2026 (Beispiel-EFH mit Walm-/Satteldach, kalt und ausgebaut):
+  - Jede IfcSlab .ROOF. wird ein eigenes Raumtool-Dach; nur solche Dächer begrenzen die Raumvolumen. Das Satteldach geht deshalb
+    als zwei Flächen raus (`dachPrisma: true` = alter Einzelkörper, begrenzt keine Räume).
+  - Dachflächen-Profil muss eine einfache Schleife sein (Fehler bis 7a39aec: Punkte umsortiert → Fläche lag flach). Test prüft alle Profile.
+  - Raumtool übernimmt Dachneigung, Traufe und First exakt, nimmt aber eigene Dachdicke (15 cm). Raumvolumen unter der Schräge rechnet
+    Raumtool selbst (5–10 % unter der Rechnung des Gebäudemodells); ohne Schräge identisch.
+  - IfcBooleanClippingResult wird bei Wänden und Decken ignoriert: Wände kommen voll hoch an, Raumtool schneidet sie im Volumen selbst.
+    Die Kehlbalkenlage wird deshalb als beschnittener Grundriss exportiert. Raumtool legt je Geschoss zusätzlich eine eigene
+    Decke (25 cm) an; im ausgebauten Dach ragt sie in der 3D-Ansicht durchs Dach.
+  - Prüfung meldet Fenster/Türen, die in die Dachschräge reichen (im Raumtool als Dachfenster anlegen).
 - Prüfung im Gebäudemodell (`GMIFC.pruefen`): Wandüberschneidungen, Öffnungen über der Wand oder übereinander,
   Räume gegen die Bestandsaufnahme, Geschosse mit anderen Außenmaßen. Eintrag antippen wählt das Bauteil.
   Öffnungen werden beim Laden in den Wandkörper gerückt (`GMIFC.einruecken`). Zwei Finger zoomen (2D und 3D).

@@ -7,5 +7,5 @@ const [, , src, out, mode] = process.argv, d = JSON.parse(fs.readFileSync(src, '
 const fl = (d.gespeichert && d.gespeichert.version >= MODEL_VERSION ? GM.floorsFromSaved(p, d.gespeichert) : GM.floorsFromBA(p)).map(f => ({ ...f, g: require('../src/ifc.js').einruecken(f.g) }));
 const doc = mode === '--wie-gespeichert' ? d.modell : GM.modelDoc(p, fl, MODEL_VERSION, (() => { const md = (d.gespeichert && d.gespeichert.dach) || (d.modell && d.modell.dach); return md && md.gesetzt ? { ...GM.dachStandard(p), ...md } : GM.dachStandard(p); })());
 let B = 'regen'; try { B = 'regen ' + require('child_process').execSync('git log -1 --format=%h', { cwd: __dirname }).toString().trim(); } catch (e) {}
-fs.writeFileSync(out, exportIFC(doc, { bearbeiter: '', organisation: 'cL-energiePlan', nord: (p.objekt || {}).nord || 0 }).split('__BUILD__').join(B));
+fs.writeFileSync(out, exportIFC(doc, Object.assign({ bearbeiter: "", organisation: "cL-energiePlan", nord: (p.objekt || {}).nord || 0 }, JSON.parse(process.env.IFC_OPTS || "{}"))).split('__BUILD__').join(B));
 console.log(out, doc.geschosse.map(f => f.name + ': ' + f.waende.length + ' Wände, ' + f.oeffnungen.filter(o => o.wand).length + ' Öffnungen').join(' · '));

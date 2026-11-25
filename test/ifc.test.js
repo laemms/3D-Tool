@@ -41,9 +41,9 @@ function check(f, strict) {
   assert.ok(!/IFCCARTESIANPOINT\(\(-1\.,/.test(t4) && /IFCOPENINGELEMENT/.test(t4), 'Öffnung beginnt vor der Wand');
   console.log('ok  Öffnung bleibt im Wandkörper');
   const t5 = exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'sattel', neigung: 35, first: 'lang', kniestock: 800, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'decke' } });
-  assert.strictEqual(n(t5, /IFCROOF\(/g), 1); assert.strictEqual(n(t5, /\.ROOF\.\)/g), 1); assert.strictEqual(n(t5, /IFCBUILDINGELEMENTPROXY\(/g), 4);
+  assert.strictEqual(n(t5, /IFCROOF\(/g), 1); assert.strictEqual(n(t5, /\.ROOF\.\)/g), 2); assert.strictEqual(n(t5, /IFCBUILDINGELEMENTPROXY\(/g), 4);
   assert.strictEqual(n(exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'pult', neigung: 10, kniestock: 300, dicke: 250, bezug: 'decke' } }), /\.ROOF\.\)/g), 1);
-  console.log('ok  Dach: IfcRoof (Satteldach als ein Körper), Giebel und Kniestock');
+  console.log('ok  Dach: IfcRoof mit zwei Dachflächen, Giebel und Kniestock');
   const t6 = exportIFC({ id: 't', geschosse: [{ ...o, raeume: o.raeume.map((r, i) => ({ ...r, beheizt: i ? 'ja' : 'nein', temp: i ? 20 : null })) }] });
   assert.ok(/IFCZONE\('[^']*',#\d+,'Unbeheizt'/.test(t6) && /IFCZONE\('[^']*',#\d+,'Beheizt 20 \\X2\\00B0\\X0\\C'/.test(t6), 'Zonen nach Beheizung'); assert.strictEqual(n(t6, /IFCRELASSIGNSTOGROUP/g), 2);
   console.log('ok  Raumzonen nach Beheizung (Raumtool: Raum-Zone)');
@@ -73,13 +73,13 @@ assert.strictEqual(exportIFC(model, { zeit: Date.UTC(2026, 10, 25), bearbeiter: 
   api.CloseModel(id);
   // Satteldach steht in beiden Firstrichtungen aufrecht (Oberkante über der Traufe)
   const o = require('./core.test.js').offen;
-  for (const first of ['lang', 'quer']) {
-    const t = exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'sattel', neigung: 35, first, kniestock: 0, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'decke' } });
+  for (const first of ['lang', 'quer']) for (const dachPrisma of [true, false]) {
+    const t = exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'sattel', neigung: 35, first, kniestock: 0, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'decke' } }, { dachPrisma });
     const m = api.OpenModel(new Uint8Array(Buffer.from(t))); let lo = 1e9, hi = -1e9;
-    api.StreamAllMeshes(m, ms => { const ln = api.GetLine(m, ms.expressID); if (ln.type !== WebIFC.IFCSLAB || !/Satteldach/.test(ln.Name && ln.Name.value)) return;
+    api.StreamAllMeshes(m, ms => { const ln = api.GetLine(m, ms.expressID); if (ln.type !== WebIFC.IFCSLAB || !/Satteldach|Dachfl/.test(ln.Name && ln.Name.value)) return;
       for (let i = 0; i < ms.geometries.size(); i++) { const pg = ms.geometries.get(i), g = api.GetGeometry(m, pg.geometryExpressID), v = api.GetVertexArray(g.GetVertexData(), g.GetVertexDataSize()), T = pg.flatTransformation;
         for (let k = 0; k < v.length; k += 6) { const y = T[1] * v[k] + T[5] * v[k + 1] + T[9] * v[k + 2] + T[13]; lo = Math.min(lo, y); hi = Math.max(hi, y); } } });
-    api.CloseModel(m); assert.ok(lo > 2.0 && hi > 4.5, 'Satteldach (First ' + first + ') steht falsch: ' + lo.toFixed(2) + '…' + hi.toFixed(2));
+    api.CloseModel(m); assert.ok(lo > 2.0 && hi > 4.5, 'Satteldach (First ' + first + (dachPrisma ? ', Prisma' : ', Flächen') + ') steht falsch: ' + lo.toFixed(2) + '…' + hi.toFixed(2));
   }
   console.log('ok  Satteldach in beiden Firstrichtungen aufrecht');
   // ausgebautes Dach: Wände des Dachgeschosses enden an der Dachunterseite (web-ifc rechnet den Schnitt)
@@ -95,5 +95,23 @@ assert.strictEqual(exportIFC(model, { zeit: Date.UTC(2026, 10, 25), bearbeiter: 
           over = Math.max(over, z - GM.dachUnten(DA, P[0] * 1000, P[2] * 1000)); } } lo = Math.min(lo, hi); });
     api.CloseModel(m); assert.ok(walls > 0 && over < 15, form + ': Wand ragt ' + Math.round(over) + ' mm über die Dachunterseite'); assert.ok(lo < 1500, form + ': Traufwand nicht gekürzt (' + Math.round(lo) + ')');
   }
-  console.log('ok  Ausgebautes Dach: Wände enden an der Dachunterseite (Satteldach, Walmdach)'); console.log('IFC geprüft');
+  console.log('ok  Ausgebautes Dach: Wände enden an der Dachunterseite (Satteldach, Walmdach)');
+  // Profile ohne Selbstüberschneidung (Fehler 25.11.2026: Dachfläche als Schleife, Raumtool 3D legte die Fläche flach)
+  { const crossing = pts => { const n = pts.length, cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      for (let i = 0; i < n; i++) for (let k = i + 2; k < n; k++) { if (i === 0 && k === n - 1) continue; const [a, b, c, d] = [pts[i], pts[(i + 1) % n], pts[k], pts[(k + 1) % n]];
+        if (cr(a, b, c) * cr(a, b, d) < -1e-12 && cr(c, d, a) * cr(c, d, b) < -1e-12) return true; } return false; };
+    for (const form of ['sattel', 'walm', 'zelt', 'pult']) for (const fl of [true, false]) {
+      const doc = { id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form, neigung: 40, first: 'lang', kniestock: 500, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'decke' } };
+      const t = exportIFC(doc, { dachPrisma: !fl }), L = {}; t.split(/\r?\n/).forEach(l => { const m = /^#(\d+)=(.*);$/.exec(l); if (m) L[m[1]] = m[2]; });
+      for (const id in L) { const m = /^IFCARBITRARYCLOSEDPROFILEDEF\(\.AREA\.,\$,#(\d+)\)/.exec(L[id]); if (!m) continue;
+        const pts = L[m[1]].match(/#\d+/g).slice(0, -1).map(r => L[r.slice(1)].match(/-?[\d.]+(E-?\d+)?/g).map(Number));
+        assert.ok(!crossing(pts), form + ': Profil #' + m[1] + ' überschneidet sich selbst'); } }
+    console.log('ok  Profile ohne Selbstüberschneidung (alle Dachformen)'); }
+  { const { pruefen } = require('../src/ifc.js'), w1 = o.waende.find(w => w.ext && !GM.isHilf(w)), fen = { id: 'f', wand: w1.id, typ: 'fenster', abstand: 1000, breite: 1000, hoehe: 1200, brh: 900 };
+    const mk = bezug => ({ id: 't', geschosse: [{ ...o, oeffnungen: [fen], niveau_mm: 0, geschossHoehe_mm: 2800, rohdecke_mm: 250 }], dach: { form: 'walm', neigung: 45, kniestock: 1000, ueberTraufe: 400, dicke: 250, bezug } });
+    assert.ok(pruefen(mk('boden')).some(x => /Dachschräge/.test(x.text)), 'Fenster in der Dachschräge nicht gemeldet'); assert.ok(!pruefen(mk('decke')).some(x => /Dachschräge/.test(x.text)));
+    // Kehlbalkenlage nur dort, wo das Dach höher liegt
+    const t = exportIFC(mk('boden')), sl = /IFCSLAB\('[^']*',#\d+,'Oberste Geschossdecke/.test(t), tw = exportIFC({ ...mk('boden'), dach: { ...mk('boden').dach, neigung: 15 } });
+    assert.ok(sl && !/'Oberste Geschossdecke/.test(tw), 'Kehlbalkenlage: flaches Dach darf keine Decke haben');
+    console.log('ok  Ausgebautes Dach: Fenster in der Schräge gemeldet, Kehlbalkenlage beschnitten'); } console.log('IFC geprüft');
 })().catch(e => { console.error(e); process.exit(1); });

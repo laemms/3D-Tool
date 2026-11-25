@@ -169,9 +169,18 @@
       // Rohdecke über dem Geschoss (bzw. oberste Geschossdecke) und Bodenplatte unter dem untersten Geschoss
       const um = f.umriss || GM.umriss(g), rd = f.rohdecke_mm;
       if (um.length >= 3 && rd > 0) {
-        const q = ccw(um.map(W)), [db, dt] = CLIP(EX(q, rd / 1000, (H - rd) / 1000), fi, [0, 0], [1, 0], um.map(c => [c[0] + OFF[0], c[1] + OFF[1]]), elev[fi] + H) /* Kehlbalkenlage im ausgebauten Dach */;
+        /* Kehlbalkenlage im ausgebauten Dach: nur der Teil, über dem die Dachunterseite höher als die Decke liegt (Grundriss mit den
+           Dachebenen beschnitten – Raumtool 3D übernimmt IfcBooleanClippingResult bei Decken nicht, Test 25.11.2026) */
+        let umK = um; if (DA && DA.bezug === 'boden' && DA.geschoss === f.id && opts.dachSchnitt !== false)
+          for (const e of DA.ebenen) { const v = c => e.a * (c[0] + OFF[0]) + e.b * (c[1] + OFF[1]) + e.c - e.dz - elev[fi] - H, out = [];
+            umK.forEach((c, i) => { const d = umK[(i + 1) % umK.length], vc = v(c), vd = v(d); if (vc >= 0) out.push(c); if ((vc >= 0) !== (vd >= 0)) { const t = vc / (vc - vd); out.push([c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t]); } });
+            umK = out; }
+        const kA = umK.length >= 3 ? Math.abs(umK.reduce((s2, c, i) => { const d = umK[(i + 1) % umK.length]; return s2 + c[0] * d[1] - d[0] * c[1]; }, 0)) / 2e6 : 0;
+        if (kA > 0.5) {
+        const q = ccw(umK.map(W)), db = EX(q, rd / 1000, (H - rd) / 1000), dt = null;
         const sl = E(`IFCSLAB(${G('sl|' + f.id)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(db, null, dt)},$,.FLOOR.)`);
         els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id);
+        }
       }
       if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) {
         const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + f.id)},${oh},${S('Bodenplatte ' + CM(bp) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);
@@ -180,12 +189,12 @@
       // Dach mit Giebel- und Kniestockwänden auf dem obersten Geschoss
       if (DA && DA.geschoss === f.id) {
         const toI = c => [c[0] / 1000, -c[1] / 1000, (c[2] - elev[fi]) / 1000], parts = [];
-        const prism = DA.form === 'sattel' && DA.flaechen.length === 2 && opts.dachFlaechen !== true;
+        const prism = DA.form === 'sattel' && DA.flaechen.length === 2 && opts.dachPrisma === true; /* Standard: Einzelflächen – nur die übernimmt Raumtool 3D als Dach, das die Räume begrenzt (Test 25.11.2026) */
         if (!prism) DA.flaechen.forEach((q0, k) => { const q = q0.map(toI), e = nrm(sub3(q[1], q[0])); let Z = nrm(crs(e, sub3(q[q.length - 1], q[0]))); if (Z[2] < 0) Z = Z.map(v => -v);
           // Profil immer von der Traufe zum First (lokal +Y = bergauf), Ursprung an der linken Traufecke: so liest Raumtool 3D beide Dachseiten gleich
           const up = nrm(sub3([0, 0, 1], Z.map(v => v * Z[2]))), X = crs(up, Z), o = q.reduce((m, c) => { const d = sub3(c, q[0]); return Math.min(m, dot3(d, X)); }, 0), lo = q.reduce((m, c) => Math.min(m, c[2]), 1e9);
           const O = q.filter(c => Math.abs(c[2] - lo) < 1e-6).reduce((b, c) => (dot3(sub3(c, q[0]), X) < dot3(sub3(b, q[0]), X) ? c : b));
-          const [pl, sh] = PLATE(lpS, [O, ...q.filter(c => c !== O)], X, Z, DA.dicke / 1000, true), sl = E(`IFCSLAB(${G('df|' + f.id + '|' + k)},${oh},${S('Dachfläche ' + (k + 1))},$,$,${pl},${sh},$,.ROOF.)`); parts.push(sl);
+          const [pl, sh] = PLATE(lpS, [...q.slice(q.indexOf(O)), ...q.slice(0, q.indexOf(O))] /* Reihenfolge rotieren, nicht umsortieren: sonst Schleife im Profil */, X, Z, DA.dicke / 1000, true), sl = E(`IFCSLAB(${G('df|' + f.id + '|' + k)},${oh},${S('Dachfläche ' + (k + 1))},$,$,${pl},${sh},$,.ROOF.)`); parts.push(sl);
           PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['PitchAngle', 'IFCPLANEANGLEMEASURE', R(Math.acos(Math.min(1, Z[2])))]], 'dfc|' + f.id + '|' + k); });
         // Satteldach als ein Körper: Querschnitt (Giebelebene) entlang des Firsts extrudiert – Raumtool 3D übernimmt getrennte Dachflächen nur teilweise
         if (prism) {
@@ -232,6 +241,7 @@
           if (ci) o.push(c); if (ci !== di) { const t = ((p[0] - c[0]) * (q[1] - p[1]) - (p[1] - c[1]) * (q[0] - p[0])) / ((d[0] - c[0]) * (q[1] - p[1]) - (d[1] - c[1]) * (q[0] - p[0])); o.push([c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t]); } } }
       return Math.abs(GM.signedArea(o)); };
     const ccwq = q => (GM.signedArea(q) < 0 ? q.slice().reverse() : q);
+    const stp0 = GM.stapeln(fs.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f }))), DA = doc.dach ? GM.dach(doc, doc.dach) : null;
     for (const f of fs) {
       const g = { knoten: f.knoten || [], waende: f.waende || [], oeffnungen: f.oeffnungen || [] }, N = new Map(g.knoten.map(n => [n.id, n])), E = wallEnds(g), add = (lv, text, sel) => out.push({ lv, geschoss: f.id, gname: f.name, text, sel });
       const body = {}, len = {};
@@ -246,6 +256,11 @@
       for (const o of g.oeffnungen) { if (!o.wand) continue; const r = len[o.wand]; if (!r) { if (!g.waende.some(w => w.id === o.wand && !GM.isHilf(w))) continue; add('warn', 'Öffnung liegt in einem Wandstück ohne Körper', { kind: 'open', id: o.id }); continue; }
         if (o.abstand < r[0] - 1 || o.abstand + o.breite > r[1] + 1) add('warn', 'Öffnung ragt ' + cm(Math.max(r[0] - o.abstand, o.abstand + o.breite - r[1])) + ' cm über die Wand (wird beim Export eingerückt)', { kind: 'open', id: o.id });
         (byW[o.wand] ||= []).push(o); }
+      // ausgebautes Dach: Fenster und Türen, die über die Dachunterseite reichen
+      if (DA && DA.bezug === 'boden' && DA.geschoss === f.id) { const off = stp0[f.id] || { dx: 0, dy: 0 };
+        for (const o of g.oeffnungen) { const w = o.wand && g.waende.find(x => x.id === o.wand); if (!w || !body[w.id]) continue; const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], S = [-u[1], u[0]];
+          const zTop = (f.niveau_mm || 0) + (o.brh || 0) + (o.hoehe || 0), lo = Math.min(...[o.abstand, o.abstand + o.breite].flatMap(t => [-w.t, w.t].map(sv => GM.dachUnten(DA, a.x + u[0] * t + S[0] * sv + off.dx, a.y + u[1] * t + S[1] * sv + off.dy))));
+          if (zTop > lo + 20) { const tuer = /tuer/.test(o.typ || ''); add('warn', (tuer ? 'Tür' : 'Fenster') + ' reicht ' + cm(zTop - lo) + ' cm in die Dachschräge' + (tuer ? ' (Kniestock und Dach prüfen)' : ' (im Raumtool als Dachfenster anlegen)'), { kind: 'open', id: o.id }); } } }
       for (const os of Object.values(byW)) { os.sort((a, b) => a.abstand - b.abstand); for (let i = 1; i < os.length; i++) if (os[i - 1].abstand + os[i - 1].breite > os[i].abstand + 1) add('warn', 'Öffnungen überlappen sich', { kind: 'open', id: os[i].id }); }
       // Räume gegen die Bestandsaufnahme
       const rs = GM.roomsWithMeta(g, f.raeume || []);
