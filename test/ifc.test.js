@@ -43,7 +43,10 @@ function check(f, strict) {
   const t5 = exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'sattel', neigung: 35, first: 'lang', kniestock: 800, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'decke' } });
   assert.strictEqual(n(t5, /IFCROOF\(/g), 1); assert.strictEqual(n(t5, /\.ROOF\.\)/g), 1); assert.strictEqual(n(t5, /IFCBUILDINGELEMENTPROXY\(/g), 4);
   assert.strictEqual(n(exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'pult', neigung: 10, kniestock: 300, dicke: 250, bezug: 'decke' } }), /\.ROOF\.\)/g), 1);
-  console.log('ok  Dach: IfcRoof (Satteldach als ein Körper), Giebel und Kniestock'); }
+  console.log('ok  Dach: IfcRoof (Satteldach als ein Körper), Giebel und Kniestock');
+  const t6 = exportIFC({ id: 't', geschosse: [{ ...o, raeume: o.raeume.map((r, i) => ({ ...r, beheizt: i ? 'ja' : 'nein', temp: i ? 20 : null })) }] });
+  assert.ok(/IFCZONE\('[^']*',#\d+,'Unbeheizt'/.test(t6) && /IFCZONE\('[^']*',#\d+,'Beheizt 20 \\X2\\00B0\\X0\\C'/.test(t6), 'Zonen nach Beheizung'); assert.strictEqual(n(t6, /IFCRELASSIGNSTOGROUP/g), 2);
+  console.log('ok  Raumzonen nach Beheizung (Raumtool: Raum-Zone)'); }
 { const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');

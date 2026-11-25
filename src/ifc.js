@@ -85,7 +85,7 @@
     z = 0; for (let i = iEG - 1; i >= 0; i--) { z -= fs[i].geschossHoehe_mm || 2800; elev[i] = z; }
     fs.forEach((f, i) => { if (f.niveau_mm != null) elev[i] = f.niveau_mm; }); // Höhenmodell der Bestandsaufnahme (OKFF)
     const storeys = [], mat = {}, matOf = (t, sense, off) => { const k = t + '|' + sense + '|' + off; if (!mat[k]) mat[k] = E(`IFCMATERIALLAYERSETUSAGE(${E(`IFCMATERIALLAYERSET((${E(`IFCMATERIALLAYER(${E(`IFCMATERIAL(${S('Wand ' + CM(t) + ' cm')})`)},${M(t)},$)`)}),${S('Wand ' + CM(t) + ' cm')})`)},.AXIS2.,.${sense}.,${M(off)})`); return mat[k]; }, matRel = new Map();
-    let raumNr = 0;
+    let raumNr = 0; const ZON = {};
     // Geschosse übereinander stellen (wie die Bestandsaufnahme beim IFC- und DXF-Export)
     const stp = opts.stapeln === false ? {} : GM.stapeln(fs.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: { knoten: f.knoten || [], waende: f.waende || [] } })));
     const DA = model.dach ? GM.dach(model, model.dach) : null;
@@ -149,7 +149,7 @@
       for (const r of rms) {
         raumNr++; const q = ccw(r.kontur.map(W)), key = f.id + '|' + raumNr;
         const s = E(`IFCSPACE(${G('sp|' + f.id + '|' + (r.bestandsaufnahmeId || r.mitte.join(',')))},${oh},${S(String(raumNr).padStart(2, '0'))},${S(r.nutzung || '')},$,${LP(lpS, 0, 0, 0)},${SH(EX(q, (r.hoehe_mm || lichte) / 1000, 0))},${S(r.name + (r.beheizt === 'nein' ? ' (unbeheizt)' : r.temp != null ? ' (' + String(r.temp).replace('.', ',') + ' °C)' : ''))},.ELEMENT.,.INTERNAL.,$)`);
-        sp.push(s);
+        sp.push(s); (ZON[r.beheizt === 'nein' ? 'Unbeheizt' : r.temp != null ? 'Beheizt ' + String(r.temp).replace('.', ',') + ' °C' : 'Beheizt'] ||= []).push(s);
         PS(s, 'Pset_SpaceThermalDesign', [['HeatingDryBulb', 'IFCTHERMODYNAMICTEMPERATUREMEASURE', r.beheizt === 'nein' || r.temp == null ? null : R(r.temp)]], 'td|' + key);
         PS(s, 'Gebaeudemodell', [['Raumnummer', 'IFCINTEGER', raumNr], ['Flaeche', 'IFCAREAMEASURE', R(Math.round(r.flaeche_m2 * 100) / 100)], ['LichteHoehe', 'IFCLENGTHMEASURE', M(r.hoehe_mm || lichte)], ['Beheizt', 'IFCBOOLEAN', B(r.beheizt !== 'nein')]], 'gm|' + key);
       }
@@ -200,6 +200,8 @@
       if (els.length) E(`IFCRELCONTAINEDINSPATIALSTRUCTURE(${G('cs|' + f.id)},${oh},$,$,(${els.join(',')}),${st})`);
     });
     AG(bld, storeys, 'b');
+    // Raumgruppen nach Beheizung (IfcZone): für Programme, die Zonen übernehmen
+    if (opts.zonen !== false) Object.entries(ZON).forEach(([nm, ss]) => { const z = E(`IFCZONE(${G('zone|' + nm)},${oh},${S(nm)},$,$)`); E(`IFCRELASSIGNSTOGROUP(${G('zg|' + nm)},${oh},$,$,(${ss.join(',')}),$,${z})`); });
     let mi = 0; for (const [mu, ws] of matRel) E(`IFCRELASSOCIATESMATERIAL(${G('am|' + (++mi))},${oh},$,$,(${ws.join(',')}),${mu})`);
     const now = new Date(opts.zeit || Date.now()).toISOString().slice(0, 19);
     return ['ISO-10303-21;', 'HEADER;', "FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');", `FILE_NAME(${S((model.projektName || pid) + '.ifc')},'${now}',(${S(opts.bearbeiter || '')}),(${S(opts.organisation || 'cL-energiePlan')}),'Gebaeudemodell','Gebaeudemodell','');`, "FILE_SCHEMA(('IFC2X3'));", 'ENDSEC;', 'DATA;', ...L, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\r\n');
