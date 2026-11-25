@@ -149,9 +149,12 @@
         // Öffnungen: Lage auf der Raumseite → Punkt auf der Wandachse
         const list = []; for (const op of s.oeffnungen || []) { const k = Math.max(1, Math.round(op.anz || 1)); for (let j = 0; j < k; j++) list.push(op); }
         // automatisch platzierte Öffnungen: in den längsten passenden Abschnitt (Innentür → Abschnitt mit Nachbar, sonst Außenabschnitt)
-        const grp = new Map(), pos = list.map((op, j) => { let bw = op.b || 0.9; if (S.L > 0.3) bw = Math.min(bw, S.L - 0.1); return { op, bw, cc: (op.abst != null && (op.anz || 1) <= 1) ? op.abst + bw / 2 : S.L * (j + 1) / (list.length + 1) }; });
+        // gleichmäßig mit gleichen Abständen verteilen (die Bestandsaufnahme setzt nur die Mitten auf L·k/(n+1), dabei überlappen breite Fenster)
+        const spread = (von, bis, xs) => { const tot = xs.reduce((a, x) => a + x.bw, 0), gap = Math.max(0, (bis - von - tot) / (xs.length + 1)); let c = von; xs.forEach(x => { c += gap; x.cc = c + x.bw / 2; c += x.bw; }); };
+        const grp = new Map(), pos = list.map(op => { let bw = op.b || 0.9; if (S.L > 0.3) bw = Math.min(bw, S.L - 0.1); return { op, bw, cc: (op.abst != null && (op.anz || 1) <= 1) ? op.abst + bw / 2 : null }; });
+        spread(0, S.L, pos.filter(x => x.cc == null));
         if (parts.length > 1) for (const x of pos) { if (x.op.abst != null && (x.op.anz || 1) <= 1) continue; const inn = x.op.typ === 'innentuer', cand = parts.filter(q => inn ? q.nb : !q.nb); if (!cand.length) continue; const q = cand.reduce((u, v) => v.bis - v.von > u.bis - u.von ? v : u); if (!grp.has(q)) grp.set(q, []); grp.get(q).push(x); }
-        for (const [q, xs] of grp) xs.forEach((x, k) => { x.bw = Math.min(x.bw, q.bis - q.von - 0.1); x.cc = q.von + (q.bis - q.von) * (k + 1) / (xs.length + 1); });
+        for (const [q, xs] of grp) { xs.forEach(x => { x.bw = Math.min(x.bw, q.bis - q.von - 0.1); }); spread(q.von, q.bis, xs); }
         pos.forEach(({ op, bw, cc }) => { if (!(bw > 0.2)) return; const part = parts.find(q => cc >= q.von - 1e-6 && cc <= q.bis + 1e-6) || { ax: 0, t: extTh(s) }; const ax = part.ax || 0, m = [S.a[0] + S.dir[0] * cc + S.n[0] * ax, S.a[1] + S.dir[1] * cc + S.n[1] * ax]; openings.push({ m: [m[0] * 1000, m[1] * 1000], typ: op.typ, breite: Math.round(bw * 1000), brh: Math.round((op.bruest || 0) * 1000), hoehe: Math.round((op.h || 1) * 1000), quelle: op.id }); });
       });
       // Stücke zu einer geschlossenen Achsenkontur verbinden
@@ -263,6 +266,18 @@
     return L;
   }
 
-  const api = { hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  /* überlappende Öffnungen einer Wand gleichmäßig verteilen (Reihenfolge bleibt), z. B. aus älteren Modellen */
+  function fixOpenings(g) {
+    const N = nodeMap(g); let changed = false; const os = (g.oeffnungen || []).map(o => ({ ...o }));
+    for (const w of g.waende) {
+      const xs = os.filter(o => o.wand === w.id).sort((a, b) => a.abstand - b.abstand); if (xs.length < 2) continue;
+      if (!xs.some((o, i) => i && xs[i - 1].abstand + xs[i - 1].breite > o.abstand)) continue;
+      const [a, b] = wallEnds(g, w, N), L = len(sub(b, a)), tot = xs.reduce((s, o) => s + o.breite, 0), gap = Math.max(0, (L - tot) / (xs.length + 1)); let c = 0;
+      xs.forEach(o => { c += gap; o.abstand = Math.round(c); c += o.breite; }); changed = true;
+    }
+    return changed ? { ...g, oeffnungen: os } : g;
+  }
+
+  const api = { fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

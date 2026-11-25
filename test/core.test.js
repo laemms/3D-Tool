@@ -98,6 +98,15 @@ t('Außenumriss: Rechteck mit Außenwand außen', () => { let g = { knoten: [], 
   g = GM.edit.addWall(g, [0, 0], [10000, 0], A); g = GM.edit.addWall(g, [10000, 0], [10000, 8000], A); g = GM.edit.addWall(g, [10000, 8000], [0, 8000], A); g = GM.edit.addWall(g, [0, 8000], [0, 0], A);
   const u = GM.umriss(g); assert.strictEqual(Math.abs(GM.signedArea(u)), 10730 * 8730); assert.strictEqual(GM.rooms(g)[0].flaeche_m2, 80);
 });
+t('Mehrere Fenster (anz 2) auf kurzer Wand überlappen nicht', () => {
+  const R = { id: 'r', name: 'Wohnen', x: 0, y: 0, beheizt: 'ja', temp: 20, segs: [0, 90, 180, 270].map((d, i) => ({ dir: d, len: i % 2 ? 4 : 3.3, grenzt: 'aussen', nachbarId: '', oeffnungen: i === 0 ? [{ id: 'f', typ: 'fenster', b: 1.2, h: 1.4, bruest: 0.9, anz: 2 }] : [] })) };
+  const f = { id: 'eg', name: 'EG', raeume: [R] }, g = GM.fromBestandsaufnahme({ bauteile: [], geschosse: [f] }, f).graph, os = g.oeffnungen.slice().sort((a, b) => a.abstand - b.abstand);
+  assert.strictEqual(os.length, 2); assert.ok(os[0].abstand + os[0].breite <= os[1].abstand, JSON.stringify(os));
+});
+t('Gespeicherte Modelle: überlappende Öffnungen werden verteilt', () => { let g = { knoten: [], waende: [], oeffnungen: [] }; g = GM.edit.addWall(g, [0, 0], [3300, 0], { t: 365, ts: 0, ext: true });
+  const id = g.waende[0].id; g.oeffnungen = [{ id: 'o1', wand: id, abstand: 620, breite: 1200 }, { id: 'o2', wand: id, abstand: 1720, breite: 1200 }];
+  assert.deepStrictEqual(GM.fixOpenings(g).oeffnungen.map(o => o.abstand), [300, 1800]); const h = { ...g, oeffnungen: [g.oeffnungen[0]] }; assert.strictEqual(GM.fixOpenings(h), h);
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----

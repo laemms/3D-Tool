@@ -158,7 +158,7 @@ function fromBA(p) {
 }
 function selectProject(pid) {
   st.pid = pid; $('proj').value = pid; const p = st.projects[pid], m = st.models[pid];
-  if (m && m.version >= MODEL_VERSION) st.floors = p.geschosse.map(f => { const x = (m.geschosse || []).find(y => y.id === f.id) || { knoten: [], waende: [], oeffnungen: [], raeume: [] }; return { id: f.id, name: f.name || 'Geschoss', h: x.geschossHoehe_mm || Math.round((f.geschossHoehe || 2.8) * 1000), g: { knoten: x.knoten || [], waende: x.waende || [], oeffnungen: x.oeffnungen || [] }, meta: x.raeume || [] }; });
+  if (m && m.version >= MODEL_VERSION) st.floors = p.geschosse.map(f => { const x = (m.geschosse || []).find(y => y.id === f.id) || { knoten: [], waende: [], oeffnungen: [], raeume: [] }; return { id: f.id, name: f.name || 'Geschoss', h: x.geschossHoehe_mm || Math.round((f.geschossHoehe || 2.8) * 1000), g: GM.fixOpenings({ knoten: x.knoten || [], waende: x.waende || [], oeffnungen: x.oeffnungen || [] }), meta: x.raeume || [] }; });
   else { st.floors = fromBA(p); st.dirty = !!st.db || !!st.local; }
   const fs = st.floors.filter(f => f.g.waende.length);
   st.fid = (fs.find(f => /^(eg|erd)/i.test(f.name)) || fs[0] || st.floors[0] || {}).id;
