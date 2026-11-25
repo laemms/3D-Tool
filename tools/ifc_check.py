@@ -49,7 +49,7 @@ for k, (sid, sname) in enumerate(storeys.items()):
     ov = sum(w.area for w in W) - uw.area
     R = [r[2] for r in rooms]; ur = unary_union(R) if R else Polygon()
     wr = uw.intersection(ur).area
-    allu = unary_union(W + R); holes = sum(1 for g in (allu.geoms if hasattr(allu, 'geoms') else [allu]) for h in g.interiors if Polygon(h).area > 0.001)
+    allu = unary_union(W + R); holes = sum(1 for g in (allu.geoms if hasattr(allu, 'geoms') else [allu]) for h in g.interiors if Polygon(h).area > 0.005)
     print(f'\n{sname}: {len(walls)} Wände, {len(rooms)} Räume, Überschneidung Wände {ov:.3f} m², Wand in Raum {wr:.3f} m², Lücken {holes}, Teile {len(allu.geoms) if hasattr(allu, "geoms") else 1}')
     for long, nr, poly, h in sorted(rooms, key=lambda r: r[1]): print(f'  {nr} {long:42s} {poly.area:7.2f} m²  lichte Höhe {h:.2f} m')
     print(f'  Summe Raumflächen {sum(r[2].area for r in rooms):.2f} m²')

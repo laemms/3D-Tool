@@ -87,6 +87,7 @@
         const a = N.get(w.a), b = N.get(w.b); if (!a || !b || GM.isHilf(w)) continue; // Hilfskanten haben keinen Wandkörper
         const ea = ends.get(w.id).a, eb = ends.get(w.id).b, A = W([a.x, a.y]), Bp = W([b.x, b.y]), dx = Bp[0] - A[0], dy = Bp[1] - A[1], Lm = Math.hypot(dx, dy); if (Lm < 0.01) continue;
         const ux = dx / Lm, uy = dy / Lm, ts = (w.ts == null ? w.t / 2 : w.ts), x0 = -ea / 1000, x1 = Lm + eb / 1000;
+        if (x1 - x0 < 0.005) continue; // kurzes Stück zwischen zwei Stößen liegt ganz in den durchlaufenden Wänden
         // im Bildschirm liegt die S-Seite rechts der Laufrichtung; nach dem Spiegeln von y ist das lokal −Y
         const yS = -ts / 1000, yO = (w.t - ts) / 1000, lp = LP(lpS, A[0], A[1], 0, ux, uy);
         const axis = E(`IFCSHAPEREPRESENTATION(${ctx},'Axis','Curve2D',(${E(`IFCPOLYLINE((${P2(0, 0)},${P2(Lm, 0)}))`)}))`);
