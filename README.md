@@ -52,6 +52,12 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Raumzonen (IfcZone) nach Beheizung: „Unbeheizt“, „Beheizt 20 °C“ … Raumtool 3D übernimmt sie als Raum-Zone.
   Die Konditionierung (beheizt/unbeheizt) übernimmt Raumtool aus der IFC nicht (getestet: Zone, ObjectType,
   Pset_SpaceThermalRequirements); U-Werte setzt Chris in der Heizlast (H73), deshalb keine U-Werte im IFC.
+- Nacharbeit in Raumtool (`GMIFC.nacharbeit`, `nacharbeitText`): Rohdecke je Geschoss, unbeheizte/abweichend temperierte Räume,
+  Hinweis zur Raumtool-Konstruktionsdicke beim ausgebauten Dach, Dachfenster mit Maß, Unterkante und Dachfläche (Himmelsrichtung über
+  `GM.dachFlaechenListe`, Stücke einer Ebene zusammengefasst), Warnungen der Prüfung. Im Register Datei sichtbar, beim Export als
+  `<Projekt>_Raumtool_Nacharbeit.txt` neben die IFC gelegt. Dachfenster werden im Register Dach erfasst (2D gestrichelt, 3D blau).
+- Oberfläche (25.11.2026): Planblatt über den ganzen Bildschirm, schwebende Leisten, Seitenleiste mit Registern; Deploy ins Artefakt
+  immer als `gebaeudemodell.html` (index.html ist dort das Bestandsaufnahme-Tool).
 - Eigene Testhäuser (`tools/testhaeuser.js`, Test `test/testhaeuser.test.js`, keine Kundendaten): A = KG/EG/ausgebautes DG mit
   Satteldach, B = Erker und 45°-Ecke mit Walmdach, C = Staffelgeschoss mit Pultdach. `node tools/testhaeuser.js <ordner>` schreibt IFC
   und Prüfdaten. Raumtool 3D (25.11.2026): alle drei 0 Fehler, Geschosse aufeinander, Volumen wie Modell (< 0,6 %).

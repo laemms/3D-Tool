@@ -119,6 +119,10 @@ tr:last-child td{border-bottom:0;font-weight:700}
 .pr span{flex:1;min-width:0;white-space:normal;font-size:14px}
 .pr.warn{color:inherit}.pr.warn span::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-right:7px;vertical-align:1px}
 .stand{margin-top:22px;font-size:12px;color:var(--mute)}
+.pane h3.sub{font-size:14.5px;font-weight:700;margin:22px 0 4px}
+.nach h4{font-size:13.5px;font-weight:600;margin:14px 0 4px}.nach ul{margin:0;padding-left:18px;font-size:14px}.nach li{margin:3px 0}
+.df{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}.df select{grid-column:1/-1}.df label{font-size:12px;color:var(--mute);display:grid;gap:2px}.df input{width:100%;min-height:36px!important}.df .del{grid-column:1/-1;justify-self:start;min-height:32px!important;border:0!important;padding:0!important;color:var(--bad);background:none!important}
+#df-add{margin-top:10px}
 dialog{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink);max-width:420px;box-shadow:var(--lift);padding:20px}
 dialog::backdrop{background:rgba(10,16,13,.35)}
 dialog .bar{justify-content:flex-end;margin-top:12px}
@@ -217,10 +221,17 @@ dialog button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border
       <label for="d-bezug">Dach sitzt</label><select id="d-bezug"><option value="decke">auf der obersten Geschossdecke (kalter Dachraum)</option><option value="boden">auf dem obersten Geschoss (ausgebautes Dach)</option></select>
     </div>
     <p class="small" id="d-info"></p>
+    <h3 class="sub">Dachfenster</h3>
+    <p class="small">Raumtool 3D übernimmt Dachfenster nicht aus der IFC. Sie stehen mit Maßen in der Nacharbeit-Liste im Register Datei.</p>
+    <div id="dfl"></div>
+    <button id="df-add">Dachfenster hinzufügen</button>
   </section>
   <section class="pane" data-pane="datei" hidden><h2>Datei</h2>
     <p class="lead">Änderungen werden automatisch auf diesem Gerät gespeichert. Der Export legt die IFC-Datei für Raumtool 3D und die Prüfdaten nebeneinander ab.</p>
     <div class="bar"><button class="pri" id="save">Jetzt speichern</button><button id="reimport" title="Modell aus den Räumen der Bestandsaufnahme neu erzeugen">Aus Bestandsaufnahme neu erzeugen</button></div>
+    <h3 class="sub">Nacharbeit in Raumtool</h3>
+    <p class="small">Diese Angaben übernimmt Raumtool 3D nicht aus der IFC. Die Liste wird beim Export als Textdatei neben die IFC gelegt.</p>
+    <div id="nach"></div>
     <p class="stand" id="stand" title="Programmstand">Stand __BUILD__</p>
   </section>
 </aside>
@@ -231,6 +242,7 @@ dialog button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border
 {
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nfm = v => String(Math.round(v * 10) / 10).replace('.', ',');
 const nf = (v, d = 2) => v == null || isNaN(v) ? '–' : Number(v).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
 const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isNaN(v) ? null : v; };
 const MODEL_VERSION = 4; // 2: Hilfskanten; 3: Querwand-Lücken; 4: Raumtrennung ohne Wand
@@ -338,10 +350,11 @@ async function exportIfc() {
   const doc0 = modelDoc(), stp = GM.stapeln(doc0.geschosse.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f }))), nm = st => doc0.geschosse.filter(f => stp[f.id].st === st).map(f => f.name);
   const ref = nm('bezug')[0], sum = ref ? ' ' + [nm('gleich').length ? nm('gleich').join(', ') + ' auf ' + ref + ' gestellt.' : '', nm('abw').length ? nm('abw').join(', ') + ': andere Außenmaße, Lage wie gezeichnet.' : ''].filter(Boolean).join(' ') : '';
   // Prüfdaten neben der IFC: Bestandsaufnahme-Projekt und Exportdokument, damit die IFC ohne neuen Export nachgebaut und geprüft werden kann
+  const nname = base + '_Raumtool_Nacharbeit.txt', ntxt = (() => { try { return GMIFC.nacharbeitText(modelDoc(), { nord: (p.objekt || {}).nord, titel: p.name }); } catch (e) { return ''; } })();
   const jname = base + '_Gebaeudemodell.json', jtxt = JSON.stringify({ format: 'gebaeudemodell-pruefdaten/1', stand: '__BUILD__', erzeugt: new Date().toISOString(), projekt: p, modell: doc0, gespeichert: st.models[p.id] || null });
   let txt; try { txt = GMIFC.exportIFC(doc0, { bearbeiter: F.bearbeiter || '', organisation: F.marke || 'cL-energiePlan', nord: (p.objekt || {}).nord || 0 }); } catch (e) { info.textContent = 'IFC konnte nicht erzeugt werden: ' + e.message; return; }
   $('ifc').disabled = true; info.textContent = 'IFC wird übergeben …'; let why = '';
-  if (st.local) { try { info.textContent = await saveLocalFile(name, txt, [{ name: jname, txt: jtxt }]) + sum; } catch (e) { info.textContent = e && e.name === 'AbortError' ? 'Abgebrochen.' : 'IFC konnte nicht gespeichert werden: ' + ((e && e.message) || e); } $('ifc').disabled = false; return; }
+  if (st.local) { try { info.textContent = await saveLocalFile(name, txt, [{ name: jname, txt: jtxt }, ntxt && { name: nname, txt: ntxt }].filter(Boolean)) + sum; } catch (e) { info.textContent = e && e.name === 'AbortError' ? 'Abgebrochen.' : 'IFC konnte nicht gespeichert werden: ' + ((e && e.message) || e); } $('ifc').disabled = false; return; }
   try {
     const mcp = window.claude && window.claude.use ? await window.claude.use('mcp') : null; if (!mcp) throw { code: 'server_not_connected' };
     let dir = (F.scOrdner || '').trim();
@@ -349,7 +362,8 @@ async function exportIfc() {
     if (!dir) throw { message: 'Der Dateiserver hat keinen freigegebenen Ordner gemeldet.' };
     const path = pjoin(dir, name); await mcp.callTool('host:filesystem', 'write_file', { path, content: txt }, { cache: false });
     try { await mcp.callTool('host:filesystem', 'write_file', { path: pjoin(dir, jname), content: jtxt }, { cache: false }); } catch (e) { /* Zusatzdatei ist optional */ }
-    info.textContent = 'IFC liegt im Übergabeordner: ' + path + sum; $('ifc').disabled = false; return;
+    if (ntxt) try { await mcp.callTool('host:filesystem', 'write_file', { path: pjoin(dir, nname), content: ntxt }, { cache: false }); } catch (e) { /* Zusatzdatei ist optional */ }
+    info.textContent = 'IFC liegt im Übergabeordner: ' + path + sum + (ntxt ? ' Nacharbeit für Raumtool: ' + nname + '.' : ''); $('ifc').disabled = false; return;
   } catch (e) { why = e && e.code ? fsMsg(e) : (e && e.message) || String(e); }
   try { const dl = await window.claude.use('downloads'); if (!dl) throw new Error('Download nicht verfügbar'); await dl.save({ filename: base + '_Gebaeudemodell_IFC.zip', data: zipOne(name, txt) });
     info.textContent = why + ' Die IFC wurde stattdessen als ZIP angeboten (' + base + '_Gebaeudemodell_IFC.zip). Vor dem Import in Raumtool 3D entpacken.'; }
@@ -465,6 +479,9 @@ function draw2d() {
   g.waende.forEach(w => { const a = toS([N.get(w.a).x, N.get(w.a).y]), b = toS([N.get(w.b).x, N.get(w.b).y]); s += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="var(--axis)" stroke-width="1" stroke-dasharray="3 3"/>`; });
   if (st.tool === 'sel') g.knoten.forEach(n => { const c = toS(st.drag && st.drag.id === n.id ? st.drag.p : [n.x, n.y]); s += `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${st.drag && st.drag.id === n.id ? 6 : 3}" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>`; });
   if (st.drag && st.drag.moved) { const n0 = N.get(st.drag.id); g.waende.filter(w => w.a === n0.id || w.b === n0.id).forEach(w => { const o = w.a === n0.id ? N.get(w.b) : N.get(w.a), a = toS(st.drag.p), b = toS([o.x, o.y]); s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--sel)" stroke-width="2"/>`; }); }
+  if (st.dach && (st.dach.fenster || []).length) { const doc = modelDoc(), DA = GM.dach(doc, st.dach); // Dachfenster als Projektion im obersten Geschoss
+    if (DA && DA.geschoss === f.id) { const o = GM.stapeln(doc.geschosse.map(x => ({ id: x.id, name: x.name, lageFrei: x.lageFrei, g: x })))[f.id] || { dx: 0, dy: 0 };
+      DA.fenster.forEach(w => { s += `<polygon points="${P(w.ecken.map(c => [c[0] - o.dx, c[1] - o.dy]))}" fill="color-mix(in srgb,var(--win) 14%,transparent)" stroke="var(--win)" stroke-width="1.5" stroke-dasharray="5 3"/>`; }); } }
   rooms.forEach(r => { const c = toS(GM.centroid(r.kontur)); s += `<text x="${c[0].toFixed(1)}" y="${(c[1] - 2).toFixed(1)}" text-anchor="middle" font-size="13.5" font-weight="650" letter-spacing="-.01em" fill="var(--ink)">${esc(r.name)}</text><text x="${c[0].toFixed(1)}" y="${(c[1] + 15).toFixed(1)}" text-anchor="middle" font-size="12" fill="var(--mute)" style="font-variant-numeric:tabular-nums">${nf(r.flaeche_m2)} m²</text>`; });
   if (st.tool === 'wall' && st.chain) { const pts = st.chain.pts.map(toS); if (st.hover) { const a = pts[pts.length - 1], h = toS(st.hover), L = Math.hypot(st.hover[0] - st.chain.pts[st.chain.pts.length - 1][0], st.hover[1] - st.chain.pts[st.chain.pts.length - 1][1]); s += `<line x1="${a[0]}" y1="${a[1]}" x2="${h[0]}" y2="${h[1]}" stroke="var(--sel)" stroke-width="2" stroke-dasharray="6 4"/><text x="${((a[0] + h[0]) / 2 + 8).toFixed(1)}" y="${((a[1] + h[1]) / 2 - 8).toFixed(1)}" font-size="14" font-weight="600" fill="var(--sel)">${nf(L / 1000)} m</text>`; } pts.forEach(c => { s += `<circle cx="${c[0]}" cy="${c[1]}" r="4" fill="var(--sel)"/>`; }); }
   if (st.tool !== 'sel' && st.hover) { const c = toS(st.hover); s += `<circle cx="${c[0]}" cy="${c[1]}" r="6" fill="none" stroke="var(--sel)" stroke-width="2"/>`; }
@@ -474,6 +491,22 @@ function draw2d() {
 /* ---------- Seitenleiste ---------- */
 /* ---------- Dach ---------- */
 const DF = [['d-form', 'form'], ['d-neig', 'neigung', 1], ['d-first', 'first'], ['d-knie', 'kniestock', 10], ['d-ut', 'ueberTraufe', 10], ['d-uo', 'ueberOrtgang', 10], ['d-dicke', 'dicke', 10], ['d-bezug', 'bezug'], ['d-teile', 'teileModus']];
+/* Dachfenster (nur Modell und Nacharbeit-Liste; Raumtool übernimmt sie nicht) */
+function renderDachfenster() { const box = $('dfl'), d = st.dach || {}, fw = d.fenster || [];
+  const DA = st.pid ? GM.dach(modelDoc(), d) : null, liste = GM.dachFlaechenListe(DA, ((st.projects[st.pid] || {}).objekt || {}).nord); $('df-add').disabled = !liste.length;
+  if (!fw.length) { box.innerHTML = ''; return; }
+  box.innerHTML = fw.map((w, i) => `<div class="df" data-i="${i}"><select data-k="flaeche" aria-label="Dachfläche">${liste.map(x => `<option value="${x.k}"${x.k === w.flaeche ? ' selected' : ''}>Dachfläche ${x.nr}: fällt nach ${x.richtung}, ${x.neigung}°, ${nf(x.flaeche_m2, 1)} m²</option>`).join('')}</select>
+    <label>Breite cm<input data-k="breite" inputmode="decimal" value="${nfm((w.breite || 780) / 10)}"></label><label>Höhe cm<input data-k="hoehe" inputmode="decimal" value="${nfm((w.hoehe || 1180) / 10)}"></label>
+    <label>Unterkante cm<input data-k="unterkante" inputmode="decimal" value="${nfm((w.unterkante == null ? 1000 : w.unterkante) / 10)}" title="über Rohfußboden des Dachgeschosses"></label><label>Mitte m<input data-k="mitte" inputmode="decimal" value="${w.mitte == null ? '' : nf(w.mitte / 1000, 2)}" placeholder="Mitte" title="Abstand von der Traufecke, leer = Mitte der Fläche"></label>
+    <button class="del" data-del="${i}">Dachfenster entfernen</button></div>`).join('');
+  box.querySelectorAll('.df').forEach(row => { const i = +row.dataset.i;
+    row.querySelectorAll('[data-k]').forEach(el => el.addEventListener('change', () => { const k = el.dataset.k, f = [...(st.dach.fenster || [])], w = { ...f[i] };
+      if (k === 'flaeche') w.flaeche = +el.value; else { const v = num(el.value); if (k === 'mitte') w.mitte = v == null ? null : Math.round(v * 1000); else if (v != null && v >= 0) w[k] = Math.round(v * 10); }
+      f[i] = w; dachSet({ fenster: f }); })); });
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { const f = [...(st.dach.fenster || [])]; f.splice(+b.dataset.del, 1); dachSet({ fenster: f }); }); }
+function dachSet(ch) { st.dach = { ...st.dach, ...ch, gesetzt: true }; st.dirty = true; scheduleSave(); renderDach(); renderDachfenster(); if (st.view === 'haus') draw3d(); else if (st.view === '2d') draw2d(); }
+function renderNacharbeit() { if (st.tab !== 'datei' || !st.pid) return; let a = []; try { a = GMIFC.nacharbeit(modelDoc(), { nord: ((st.projects[st.pid] || {}).objekt || {}).nord }); } catch (e) { $('nach').textContent = 'Nicht möglich: ' + e.message; return; }
+  $('nach').className = 'nach'; $('nach').innerHTML = a.map(x => `<h4>${esc(x.titel)}</h4><ul>${x.punkte.map(p => `<li>${esc(p)}</li>`).join('')}</ul>`).join(''); }
 function renderDach() { const d = st.dach || {}; for (const [id, k, f] of DF) { const el = $(id); if (document.activeElement === el) continue; el.value = f ? String(Math.round((d[k] || 0) / f * 10) / 10).replace('.', ',') : (d[k] || (k === 'teileModus' ? 'auto' : '')); }
   const walm = d.form === 'walm' || d.form === 'zelt'; $('d-first').disabled = walm || d.form === 'flach' || d.form === 'kein'; $('d-uo').disabled = walm || d.form === 'kein';
   const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). ' + (r.teile && r.teile.length > 1 ? 'Grundriss in ' + r.teile.length + ' Dachteile zerlegt (Kehlen; schmale Anbauten mit Pult- oder Schleppdach).' : 'Grundriss: Außenumriss als Rechteck.') + (walm ? ' Walm: First längs, Überstand Traufe ringsum.' : '') + (r.bezug === 'boden' ? ' Wände und Räume des Dachgeschosses enden an der Dachunterseite.' : '') : 'Kein Dach im Modell.'; }
@@ -521,10 +554,10 @@ function renderProps() {
 function updButtons() { $('undo').disabled = !st.undo.length; $('redo').disabled = !st.redo.length; }
 function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht das Modell, Mausrad oder zwei Finger zoomen' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt antippen oder Länge und Richtung eingeben, Esc beendet die Wand' : 'Ersten Punkt der Wand antippen') : st.tool === 'open' ? 'Wand antippen, um Fenster oder Tür zu setzen' : 'Leere Fläche ziehen verschiebt den Plan, Mausrad oder zwei Finger zoomen'; }
 /* Seitenleiste: Register, ein-/ausblenden; neue Auswahl im Plan öffnet das Register „Auswahl“ */
-function setTab(t) { st.tab = t; document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t; }); }
+function setTab(t) { st.tab = t; document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t; }); if (t === 'datei') renderNacharbeit(); if (t === 'dach') renderDachfenster(); }
 function selKey(x) { return x ? x.kind + ':' + (x.id || (x.mitte || []).join(',')) : ''; }
 function refresh(refit) { if (refit) st.vw = null; const f = fl(); if (!f) return;
-  const k = selKey(st.sel); if (k && k !== st.lastSel && st.tab !== 'auswahl' && !document.body.classList.contains('nopanel')) setTab('auswahl'); st.lastSel = k; st.view !== '2d' ? draw3d() : draw2d(); renderRooms(); renderDach(); renderPruefung(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
+  const k = selKey(st.sel); if (k && k !== st.lastSel && st.tab !== 'auswahl' && !document.body.classList.contains('nopanel')) setTab('auswahl'); st.lastSel = k; st.view !== '2d' ? draw3d() : draw2d(); renderRooms(); renderDach(); if (st.tab === 'dach') renderDachfenster(); renderPruefung(); renderNacharbeit(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
 
 /* ---------- Zeiger ---------- */
 const svg = $('plan');
@@ -609,7 +642,7 @@ async function draw3d() {
     if (inward) { if (Nn.dot(inward.clone().sub(O)) < 0) Nn.negate(); } else if (Nn.y < 0) Nn.negate();
     const Y = Nn.clone().cross(X), sh = new T.Shape(P.map(q => { const d = q.clone().sub(O); return new T.Vector2(d.dot(X), d.dot(Y)); }));
     const ms = new T.Mesh(new T.ExtrudeGeometry(sh, { depth, bevelEnabled: false }), m); ms.matrixAutoUpdate = false; ms.matrix.makeBasis(X, Y, Nn).setPosition(inward ? O : O.clone().addScaledVector(Nn, -depth)); grp.add(ms); };
-  if (DA) { DA.flaechen.forEach(q => plate(q, DA.dicke, mRoof)); const all = DA.waende.flatMap(w => w.pts), c = all.length ? new T.Vector3(all.reduce((a, q) => a + q[0], 0) / all.length, 0, all.reduce((a, q) => a + q[1], 0) / all.length) : null;
+  if (DA) { DA.flaechen.forEach(q => plate(q, DA.dicke, mRoof)); (DA.fenster || []).forEach(w => plate(w.ecken.map(c => [c[0] + w.n[0] * 25, c[1] + w.n[1] * 25, c[2] + w.n[2] * 25]), 40, mWin)); const all = DA.waende.flatMap(w => w.pts), c = all.length ? new T.Vector3(all.reduce((a, q) => a + q[0], 0) / all.length, 0, all.reduce((a, q) => a + q[1], 0) / all.length) : null;
     DA.waende.forEach(w => { const cc = c.clone(); cc.y = w.pts[0][2]; plate(w.pts, DA.wanddicke, mExt, cc); }); yTop = Math.max(yTop, DA.firsthoehe); }
   if (x1 < x0) { x0 = z0 = 0; x1 = z1 = 8000; }
   t.c = [(x0 + x1) / 2, haus ? (yTop + yBot) / 2 : 1000, (z0 + z1) / 2]; t.dist = Math.max(x1 - x0, z1 - z0, haus ? yTop - yBot : 0) * (haus ? 2.3 : 1.9) + 4000; t.scene.add(grp); frame();
@@ -622,6 +655,8 @@ function setTool(t) { if (st.chain) endChain(false); st.tool = t; st.hover = nul
 function setView(v) { st.view = v; $('v2d').setAttribute('aria-pressed', v === '2d'); $('v3d').setAttribute('aria-pressed', v === '3d'); $('vhaus').setAttribute('aria-pressed', v === 'haus'); $('plan').toggleAttribute('hidden', v !== '2d'); $('c3d').toggleAttribute('hidden', v === '2d'); $('zoombox').hidden = v !== '2d'; refresh(); }
 function confirmBox(text) { return new Promise(res => { const d = $('dlg'); $('dlg-t').textContent = text; d.showModal(); const done = v => { d.close(); $('dlg-yes').onclick = $('dlg-no').onclick = null; res(v); }; $('dlg-yes').onclick = () => done(true); $('dlg-no').onclick = () => done(false); }); }
 $('proj').addEventListener('change', e => { if (st.dirty) save(); selectProject(e.target.value); });
+$('df-add').addEventListener('click', () => { const DA = GM.dach(modelDoc(), st.dach || {}), l = GM.dachFlaechenListe(DA, ((st.projects[st.pid] || {}).objekt || {}).nord); if (!l.length) return;
+  const best = l.find(x => /Süd/.test(x.richtung)) || l[0]; dachSet({ fenster: [...((st.dach || {}).fenster || []), { flaeche: best.k, breite: 780, hoehe: 1180, unterkante: 1000, mitte: null }] }); });
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
 $('panel-t').addEventListener('click', () => { const off = document.body.classList.toggle('nopanel'); $('panel-t').setAttribute('aria-pressed', !off); try { localStorage.setItem('gm.panel', off ? '0' : '1'); } catch (e) {} if (st.view === '2d') refresh(true); else frame(); });
 try { if (localStorage.getItem('gm.panel') === '0') { document.body.classList.add('nopanel'); $('panel-t').setAttribute('aria-pressed', 'false'); } } catch (e) {}

@@ -313,6 +313,21 @@
     return ch ? { ...g, oeffnungen: os } : g;
   }
 
-  const api = { einruecken, pruefen, exportIFC, wallEnds, guid };
+  /* Was nach dem IFC-Import in Raumtool 3D noch von Hand zu tun ist (Raumtool übernimmt diese Angaben nicht aus der IFC,
+     Tests vom 25.11.2026). Liefert Abschnitte [{ titel, punkte: [text] }]; leere Abschnitte fallen weg. */
+  function nacharbeit(doc, opts = {}) {
+    const fs = (doc.geschosse || []).filter(f => (f.waende || []).some(w => !GM.isHilf(w))), out = [], m = v => String(Math.round(v) / 1000).replace('.', ','), cm = v => String(Math.round(v / 10 * 10) / 10).replace('.', ',');
+    const DA = doc.dach ? GM.dach(doc, doc.dach) : null;
+    out.push({ titel: 'Geschosse: Rohdecke eintragen', punkte: fs.map((f, i) => { const rd = f.rohdecke_mm, nx = fs[i + 1];
+      return (f.name || f.id) + ': Niveau ' + m(f.niveau_mm || 0) + ' m, Geschosshöhe ' + m(nx && nx.niveau_mm != null && f.niveau_mm != null ? nx.niveau_mm - f.niveau_mm : f.geschossHoehe_mm || 2800) + ' m, Rohdecke ' + (rd ? cm(rd) + ' cm' : 'nicht erfasst') + (rd && Math.abs(rd - 250) < 5 ? ' (wie Raumtool-Vorgabe)' : ''); }) });
+    const rp = []; fs.forEach(f => { const rs = GM.roomsWithMeta(f, f.raeume || []); rs.forEach(r => { if (r.beheizt === 'nein') rp.push((f.name || '') + ' ' + r.name + ': unbeheizt'); else if (r.temp != null && Number(r.temp) !== 20) rp.push((f.name || '') + ' ' + r.name + ': ' + String(r.temp).replace('.', ',') + ' °C'); }); });
+    if (rp.length) out.push({ titel: 'Räume: Konditionierung prüfen (Raum-Zonen sind angelegt)', punkte: rp });
+    if (DA) { const dp = []; if (DA.bezug === 'boden') dp.push('Ausgebautes Dach: „Dicke der Konstruktion“ bei 15 cm lassen, sonst stimmen Dachunterseite und Raumvolumen nicht.');
+      const liste = GM.dachFlaechenListe(DA, opts.nord); (DA.fenster || []).forEach((w, i) => { const fl = liste.find(x => x.k === w.flaeche); dp.push('Dachfenster ' + (i + 1) + ': ' + cm(w.breite) + ' × ' + cm(w.hoehe) + ' cm, Unterkante ' + cm(w.unterkante == null ? 1000 : w.unterkante) + ' cm über Rohfußboden, ' + (fl ? 'Dachfläche ' + fl.nr + ' (fällt nach ' + fl.richtung + ', ' + fl.neigung + '°)' : 'Dachfläche ' + (w.flaeche + 1))); });
+      if (dp.length) out.push({ titel: 'Dach', punkte: dp }); }
+    const pr = pruefen(doc).filter(x => x.lv === 'warn' || /ohne .* darüber/.test(x.text)); if (pr.length) out.push({ titel: 'Aus der Prüfung', punkte: pr.map(x => (x.gname ? x.gname + ': ' : '') + x.text) });
+    return out; }
+  function nacharbeitText(doc, opts = {}) { return ['Nacharbeit in Raumtool 3D – ' + (opts.titel || doc.name || doc.id || 'Projekt'), ''].concat(...nacharbeit(doc, opts).map(a => [a.titel, ...a.punkte.map(p => '  – ' + p), ''])).join('\r\n'); }
+  const api = { einruecken, pruefen, nacharbeit, nacharbeitText, exportIFC, wallEnds, guid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GMIFC = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -493,7 +493,9 @@
     /* Dachflächenfenster: auf Fläche k, Mitte längs der Traufe (ab erster Traufecke), Unterkante über Rohfußboden des obersten
        Geschosses (an der Dachunterseite gemessen), Breite × Höhe (Höhe entlang der Schräge) */
     const fenster = d.form === 'flach' ? [] : (d.fenster || []).map((w, i) => { const k = w.flaeche | 0, q = flaechen[k], Eb = ebenen[k]; if (!q || !Eb) return null;
-      const p0 = q[0], p1 = q[1], L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); if (L < 1) return null;
+      // Traufkante = tiefste waagrechte Kante der Fläche (bei beschnittenen Flächen nicht unbedingt die erste)
+      let ei = 0, ez = Infinity; q.forEach((c, j) => { const n2 = q[(j + 1) % q.length]; if (Math.abs(c[2] - n2[2]) < 2 && Math.hypot(n2[0] - c[0], n2[1] - c[1]) > 300 && (c[2] + n2[2]) / 2 < ez) { ez = (c[2] + n2[2]) / 2; ei = j; } });
+      const p0 = q[ei], p1 = q[(ei + 1) % q.length], L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); if (L < 1) return null;
       const e = [(p1[0] - p0[0]) / L, (p1[1] - p0[1]) / L, 0]; let hd = [-e[1], e[0]]; if (Eb.a * hd[0] + Eb.b * hd[1] < 0) hd = [-hd[0], -hd[1]];
       const sl = Eb.a * hd[0] + Eb.b * hd[1]; if (sl < 0.02) return null; const ca = 1 / Math.hypot(1, sl), uu = [hd[0] * ca, hd[1] * ca, sl * ca];
       const B = Number(w.breite) || 780, Hh = Number(w.hoehe) || 1180, zTop = niv + (w.unterkante == null ? 1000 : Number(w.unterkante)) + Eb.dz, t0 = (zTop - p0[2]) / uu[2], m = w.mitte == null ? L / 2 : Number(w.mitte);
@@ -505,6 +507,15 @@
       firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
   }
 
+  /* Dachflächen für die Auswahl (Dachfenster): geneigte Flächen ab 1 m², mit Himmelsrichtung, in die sie fallen (nord = Drehung des Nordpfeils in Grad) */
+  function dachFlaechenListe(DA, nord) { if (!DA) return []; const R = ['Nord', 'Nordost', 'Ost', 'Südost', 'Süd', 'Südwest', 'West', 'Nordwest'];
+    // Stücke derselben Ebene (bei Kehlen beschnitten) zusammenfassen; Fenster sitzen auf dem größten Stück
+    const gr = new Map(); DA.flaechen.forEach((q, k) => { const e = DA.ebenen[k], A = Math.abs(q.reduce((s2, c, i) => { const d = q[(i + 1) % q.length]; return s2 + c[0] * d[1] - d[0] * c[1]; }, 0)) / 2e6, sl = Math.hypot(e.a, e.b);
+      if (sl < 0.05) return; const key = [e.a.toFixed(3), e.b.toFixed(3), Math.round(e.c / 5)].join('|'), g = gr.get(key);
+      if (!g) gr.set(key, { k, A, Asum: A, e, sl }); else { g.Asum += A; if (A > g.A) { g.A = A; g.k = k; } } });
+    return [...gr.values()].filter(g => g.Asum >= 1).sort((p, q) => p.k - q.k).map((g, i) => { const brg = ((Math.atan2(-g.e.a, g.e.b) * 180 / Math.PI + (Number(nord) || 0)) % 360 + 360) % 360;
+      return { k: g.k, nr: i + 1, richtung: R[Math.round(brg / 45) % 8], neigung: Math.round(Math.atan(g.sl) * 180 / Math.PI), flaeche_m2: Math.round(g.Asum * 10) / 10 }; }); }
+
   /* Höhe der Dachunterseite über ±0 an einem Punkt (mm, Modellkoordinaten); Infinity ohne Dach */
   function dachUnten(DA, x, y) {
     if (!DA || !DA.ebenen || !DA.ebenen.length) return Infinity;
@@ -512,6 +523,6 @@
     // mehrere Dachteile: höchste Unterseite der Teile, die den Punkt überdecken (Kehlen = Maximum)
     const z = DA.teile.filter(T => x >= T.fp[0] - 1 && x <= T.fp[2] + 1 && y >= T.fp[1] - 1 && y <= T.fp[3] + 1).map(T => Math.min(...T.ebenen.map(e => e.a * x + e.b * y + e.c - e.dz)));
     return z.length ? Math.max(...z) : Infinity; }
-  const api = { dachTeile, dachUnten, dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  const api = { dachFlaechenListe, dachTeile, dachUnten, dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

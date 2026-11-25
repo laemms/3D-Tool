@@ -11,4 +11,11 @@ for (const [name, mk] of Object.entries(haeuser)) { const doc = mk(), pr = GMIFC
     assert.ok(Math.abs(r.volumen_m3 - v) / v < 0.006, name + ' ' + k + ': Modell ' + r.volumen_m3 + ' m³, Raumtool ' + v + ' m³'); }
   console.log('ok  ' + name); }
 assert.ok(GMIFC.pruefen(haeuser.Testhaus_C_Staffel()).some(x => /ohne OG darüber/.test(x.text)), 'Staffelgeschoss: Hinweis auf freie Decke');
+// Nacharbeit in Raumtool: Rohdecke je Geschoss, Dachfenster mit Richtung, Hinweise aus der Prüfung
+{ const d = haeuser.Testhaus_A_Mehrgeschoss(), l = GM.dachFlaechenListe(GM.dach(d, d.dach), 0);
+  assert.deepStrictEqual(l.map(x => x.richtung), ['Nord', 'Süd'], 'Himmelsrichtungen der Dachflächen'); assert.deepStrictEqual(GM.dachFlaechenListe(GM.dach(d, d.dach), 90).map(x => x.richtung), ['Ost', 'West'], 'Nordpfeil gedreht');
+  d.dach.fenster = [{ flaeche: l[1].k, breite: 780, hoehe: 1180, unterkante: 1000 }]; const t = GMIFC.nacharbeitText(d);
+  ['KG: Niveau -2,65 m, Geschosshöhe 2,65 m, Rohdecke 25 cm', 'EG: Niveau 0 m, Geschosshöhe 2,75 m, Rohdecke 22 cm', 'Dachfenster 1: 78 × 118 cm', 'fällt nach Süd', 'Dicke der Konstruktion', 'Dachschräge'].forEach(x => assert.ok(t.includes(x), 'Nacharbeit fehlt: ' + x));
+  const L = GM.dachFlaechenListe(GM.dach(haeuser.Testhaus_B_Erker_Schraeg(), haeuser.Testhaus_B_Erker_Schraeg().dach), 0); assert.ok(L.length >= 4 && new Set(L.map(x => x.nr)).size === L.length, 'Walmdach mit Anbauten: Flächen zusammengefasst und nummeriert');
+  console.log('ok  Nacharbeit-Liste für Raumtool'); }
 console.log('Testhäuser geprüft');
