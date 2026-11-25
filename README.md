@@ -46,6 +46,8 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Dach v1 (`GM.dach`): Sattel-, Pult- oder Flachdach über dem Außenumriss des obersten Geschosses als Rechteck,
   Kniestock, Überstände, Dachaufbau; „kalter Dachraum“ mit Giebel- und Kniestockwänden auf der obersten Geschossdecke.
   Einstellungen im Gebäudemodell (gespeichert im Modell), Neigung vorbelegt aus der Bestandsaufnahme. Ansicht „Haus“.
+  Raumtool 3D (Test 25.11.2026): Satteldach als ein extrudierter Körper, Giebel/Kniestock als IfcBuildingElementProxy,
+  Extrusion immer in +Z – getrennte Dachflächen, negative Extrusion und frei geformte IfcWall übernimmt es nur teilweise.
 - Prüfdaten: Der Export legt `…_Gebaeudemodell.json` neben die IFC; `node tools/regen.js <json> <ifc>` baut sie nach.
 - Raumtrennung ohne Wand (offener Übergang) geht als 2-cm-Wand „Virtuelle Wand“ ins IFC: Raumtool 3D (K12) trennt
   Räume nur an Wänden, ignoriert `IfcVirtualElement` und Wände unter 2 cm (Test 25.11.2026). Kostet je Raum ~0,04 m².

@@ -41,8 +41,9 @@ function check(f, strict) {
   assert.ok(!/IFCCARTESIANPOINT\(\(-1\.,/.test(t4) && /IFCOPENINGELEMENT/.test(t4), 'Öffnung beginnt vor der Wand');
   console.log('ok  Öffnung bleibt im Wandkörper');
   const t5 = exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'sattel', neigung: 35, first: 'lang', kniestock: 800, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'decke' } });
-  assert.strictEqual(n(t5, /IFCROOF\(/g), 1); assert.strictEqual(n(t5, /\.ROOF\.\)/g), 2); assert.strictEqual(n(t5, /IFCWALL\(/g), 4);
-  console.log('ok  Dach: IfcRoof mit zwei Dachflächen, Giebel und Kniestock'); }
+  assert.strictEqual(n(t5, /IFCROOF\(/g), 1); assert.strictEqual(n(t5, /\.ROOF\.\)/g), 1); assert.strictEqual(n(t5, /IFCBUILDINGELEMENTPROXY\(/g), 4);
+  assert.strictEqual(n(exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'pult', neigung: 10, kniestock: 300, dicke: 250, bezug: 'decke' } }), /\.ROOF\.\)/g), 1);
+  console.log('ok  Dach: IfcRoof (Satteldach als ein Körper), Giebel und Kniestock'); }
 { const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');

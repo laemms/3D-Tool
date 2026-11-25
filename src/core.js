@@ -373,7 +373,7 @@
     } else { // Satteldach
       const zr = ze + (bm - B0) * t, zt = ze - ut * t;
       flaechen.push([P(A0 - uo, B0 - ut, zt), P(A1 + uo, B0 - ut, zt), P(A1 + uo, bm, zr), P(A0 - uo, bm, zr)]);
-      flaechen.push([P(A1 + uo, B1 + ut, zt), P(A0 - uo, B1 + ut, zt), P(A0 - uo, bm, zr), P(A1 + uo, bm, zr)]);
+      flaechen.push([P(A0 - uo, B1 + ut, zt), P(A1 + uo, B1 + ut, zt), P(A1 + uo, bm, zr), P(A0 - uo, bm, zr)]);
       if (d.bezug !== 'boden') {
         if (ze > zb + 10) { waende.push(['Kniestock', [P(A0, B0, zb), P(A1, B0, zb), P(A1, B0, ze), P(A0, B0, ze)]]); waende.push(['Kniestock', [P(A1, B1, zb), P(A0, B1, zb), P(A0, B1, ze), P(A1, B1, ze)]]); }
         waende.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, bm, zr), P(A0, B1, ze)]]);
