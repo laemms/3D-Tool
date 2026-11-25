@@ -81,5 +81,19 @@ assert.strictEqual(exportIFC(model, { zeit: Date.UTC(2026, 10, 25), bearbeiter: 
         for (let k = 0; k < v.length; k += 6) { const y = T[1] * v[k] + T[5] * v[k + 1] + T[9] * v[k + 2] + T[13]; lo = Math.min(lo, y); hi = Math.max(hi, y); } } });
     api.CloseModel(m); assert.ok(lo > 2.0 && hi > 4.5, 'Satteldach (First ' + first + ') steht falsch: ' + lo.toFixed(2) + '…' + hi.toFixed(2));
   }
-  console.log('ok  Satteldach in beiden Firstrichtungen aufrecht'); console.log('IFC geprüft');
+  console.log('ok  Satteldach in beiden Firstrichtungen aufrecht');
+  // ausgebautes Dach: Wände des Dachgeschosses enden an der Dachunterseite (web-ifc rechnet den Schnitt)
+  const n = (t, re) => (t.match(re) || []).length;
+  for (const form of ['sattel', 'walm']) {
+    const doc = { id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form, neigung: 45, first: 'lang', kniestock: 1000, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'boden' } };
+    const t = exportIFC(doc), DA = GM.dach(doc, doc.dach); assert.ok(n(t, /IFCBOOLEANCLIPPINGRESULT/g) > 0 && /'Body','Clipping'/.test(t), 'kein Schnitt am Dach (' + form + ')');
+    if (form === 'walm') assert.ok(/\.HIP_ROOF\./.test(t) && n(t, /\.ROOF\.\)/g) === 4, 'Walmdach: vier Dachflächen');
+    const m = api.OpenModel(new Uint8Array(Buffer.from(t))); let over = 0, lo = 1e9, walls = 0;
+    api.StreamAllMeshes(m, ms => { const ln = api.GetLine(m, ms.expressID); if (ln.type !== WebIFC.IFCWALLSTANDARDCASE) return; walls++; let hi = -1e9;
+      for (let i = 0; i < ms.geometries.size(); i++) { const pg = ms.geometries.get(i), g = api.GetGeometry(m, pg.geometryExpressID), v = api.GetVertexArray(g.GetVertexData(), g.GetVertexDataSize()), T = pg.flatTransformation;
+        for (let k = 0; k < v.length; k += 6) { const P = [0, 1, 2].map(j => T[j] * v[k] + T[4 + j] * v[k + 1] + T[8 + j] * v[k + 2] + T[12 + j]), z = P[1] * 1000; hi = Math.max(hi, z);
+          over = Math.max(over, z - GM.dachUnten(DA, P[0] * 1000, P[2] * 1000)); } } lo = Math.min(lo, hi); });
+    api.CloseModel(m); assert.ok(walls > 0 && over < 15, form + ': Wand ragt ' + Math.round(over) + ' mm über die Dachunterseite'); assert.ok(lo < 1500, form + ': Traufwand nicht gekürzt (' + Math.round(lo) + ')');
+  }
+  console.log('ok  Ausgebautes Dach: Wände enden an der Dachunterseite (Satteldach, Walmdach)'); console.log('IFC geprüft');
 })().catch(e => { console.error(e); process.exit(1); });

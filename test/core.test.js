@@ -136,6 +136,19 @@ t('Dach: Satteldach auf der obersten Geschossdecke, First über der Mitte', () =
   assert.strictEqual(GM.dach(doc, { ...d, form: 'pult' }).flaechen.length, 1); assert.strictEqual(GM.dachStandard({ geschosse: [{ name: 'DG', raeume: [{}] }] }).bezug, 'boden');
   assert.strictEqual(GM.dachStandard({ geschosse: [{ name: 'EG', raeume: [{ decke: { grenzt: 'raum' } }, { decke: { grenzt: 'raum' } }] }] }).form, 'kein');
 });
+t('Dach: Walm- und Zeltdach, Dachunterseite', () => {
+  let g = { knoten: [], waende: [], oeffnungen: [] }; const A = { t: 300, ts: 0, ext: true };
+  g = GM.edit.addWall(g, [0, 0], [12000, 0], A); g = GM.edit.addWall(g, [12000, 0], [12000, 8000], A); g = GM.edit.addWall(g, [12000, 8000], [0, 8000], A); g = GM.edit.addWall(g, [0, 8000], [0, 0], A);
+  const doc = { geschosse: [{ id: 'eg', name: 'EG', ...g, niveau_mm: 0, geschossHoehe_mm: 2800 }] }, d = { form: 'walm', neigung: 45, first: 'quer', kniestock: 0, ueberTraufe: 0, ueberOrtgang: 0, dicke: 200, bezug: 'decke' };
+  const r = GM.dach(doc, d), u = GM.umriss(doc.geschosse[0]), xs = u.map(q => q[0]), ys = u.map(q => q[1]), W = Math.max(...ys) - Math.min(...ys), Lx = Math.max(...xs) - Math.min(...xs);
+  assert.strictEqual(r.flaechen.length, 4); assert.deepStrictEqual(r.flaechen.map(f => f.length), [4, 4, 3, 3]); assert.strictEqual(r.waende.length, 0);
+  assert.ok(Math.abs(r.firsthoehe - (2800 + W / 2)) <= 1, 'Firsthöhe Walmdach'); // First immer längs, auch bei „quer“
+  const ridge = r.flaechen[0].filter(q => q[2] === r.firsthoehe); assert.ok(Math.abs(Math.abs(ridge[0][0] - ridge[1][0]) - (Lx - W)) <= 2, 'Firstlänge = Länge − Breite');
+  const z = GM.dach(doc, { ...d, form: 'zelt' }); assert.deepStrictEqual(z.flaechen.map(f => f.length), [3, 3, 3, 3]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2, dz = 200 * Math.SQRT2;
+  assert.ok(Math.abs(GM.dachUnten(r, cx, cy) - (r.firsthoehe - dz)) < 2, 'Unterseite unter dem First'); assert.ok(Math.abs(GM.dachUnten(r, cx, Math.min(...ys)) - (2800 - dz)) < 2, 'Unterseite an der Traufe');
+  assert.strictEqual(GM.dachUnten(null, 0, 0), Infinity); assert.strictEqual(GM.dach(doc, { ...d, bezug: 'boden' }).bezug, 'boden');
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----

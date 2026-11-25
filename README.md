@@ -52,6 +52,10 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Raumzonen (IfcZone) nach Beheizung: „Unbeheizt“, „Beheizt 20 °C“ … Raumtool 3D übernimmt sie als Raum-Zone.
   Die Konditionierung (beheizt/unbeheizt) übernimmt Raumtool aus der IFC nicht (getestet: Zone, ObjectType,
   Pset_SpaceThermalRequirements); U-Werte setzt Chris in der Heizlast (H73), deshalb keine U-Werte im IFC.
+- Dach v2: Walm- und Zeltdach (First immer längs, Überstand Traufe ringsum; Dachflächen als einzelne IfcSlab .ROOF. im IfcRoof
+  HIP_ROOF/PAVILION_ROOF). Ausgebautes Dach („Dach sitzt auf dem obersten Geschoss“): Wände, Räume und Kehlbalkenlage des obersten
+  Geschosses werden an der Dachunterseite abgeschnitten (IfcBooleanClippingResult .DIFFERENCE. mit IfcHalfSpaceSolid, Darstellung
+  'Clipping'); `dachSchnitt: false` schaltet das ab. Dachunterseite = Minimum der Dachebenen (`GM.dachUnten`). In Raumtool 3D noch zu testen.
 - Prüfung im Gebäudemodell (`GMIFC.pruefen`): Wandüberschneidungen, Öffnungen über der Wand oder übereinander,
   Räume gegen die Bestandsaufnahme, Geschosse mit anderen Außenmaßen. Eintrag antippen wählt das Bauteil.
   Öffnungen werden beim Laden in den Wandkörper gerückt (`GMIFC.einruecken`). Zwei Finger zoomen (2D und 3D).

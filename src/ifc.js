@@ -70,7 +70,7 @@
     const LP = (rel, x, y, z, dx, dy) => E(`IFCLOCALPLACEMENT(${rel || '$'},${E(`IFCAXIS2PLACEMENT3D(${P3(x, y, z)},${zd},${dx == null ? xd : D3(dx, dy, 0)})`)})`);
     const poly2 = q => { const pl = q.map(c => P2(c[0], c[1])); pl.push(pl[0]); return E(`IFCPOLYLINE((${pl.join(',')}))`); };
     const EX = (q, h, z0) => E(`IFCEXTRUDEDAREASOLID(${E(`IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,${poly2(q)})`)},${E(`IFCAXIS2PLACEMENT3D(${P3(0, 0, z0 || 0)},${zd},${xd})`)},${zd},${R(h)})`);
-    const SH = (body, axis) => E(`IFCPRODUCTDEFINITIONSHAPE($,$,(${(axis ? axis + ',' : '') + E(`IFCSHAPEREPRESENTATION(${ctx},'Body','SweptSolid',(${body}))`)}))`);
+    const SH = (body, axis, typ) => E(`IFCPRODUCTDEFINITIONSHAPE($,$,(${(axis ? axis + ',' : '') + E(`IFCSHAPEREPRESENTATION(${ctx},'Body',${S(typ || 'SweptSolid')},(${body}))`)}))`);
     const PS = (obj, name, props, key) => { const ps = props.filter(x => x[2] != null).map(x => E(`IFCPROPERTYSINGLEVALUE(${S(x[0])},$,${x[1]}(${x[2]}),$)`)); if (ps.length) E(`IFCRELDEFINESBYPROPERTIES(${G('rd|' + key)},${oh},$,$,(${obj}),${E(`IFCPROPERTYSET(${G('ps|' + key)},${oh},${S(name)},$,(${ps.join(',')}))`)})`); };
     const B = v => (v ? '.T.' : '.F.'), AG = (par, ch, key) => { if (ch.length) E(`IFCRELAGGREGATES(${G('ag|' + key)},${oh},$,$,${par},(${ch.join(',')}))`); };
     let OFF = [0, 0]; const ccw = q => (GM.signedArea(q) < 0 ? q.slice().reverse() : q), W = c => [(c[0] + OFF[0]) / 1000, -(c[1] + OFF[1]) / 1000];
@@ -97,6 +97,17 @@
       const pl = E(`IFCLOCALPLACEMENT(${rel},${E(`IFCAXIS2PLACEMENT3D(${P3(O[0], O[1], O[2])},${D3(...Z)},${D3(...X)})`)})`);
       const body = E(`IFCEXTRUDEDAREASOLID(${E(`IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,${poly2(ccw(pr))})`)},${E(`IFCAXIS2PLACEMENT3D(${P3(0, 0, 0)},${zd},${xd})`)},${zd},${R(depth)})`);
       return [pl, SH(body)]; };
+    /* Ausgebautes Dach: Wände und Räume des obersten Geschosses an der Dachunterseite abschneiden (IfcBooleanClippingResult mit
+       IfcHalfSpaceSolid, wie Revit und ArchiCAD). body im lokalen System (Ursprung o, Richtung u, IFC-Geschosskoordinaten in m),
+       pts = Grundrisspunkte (mm, Modell, schon verschoben), ztop = Oberkante über ±0 (mm). Ergebnis: [Körper, Darstellungstyp] */
+    const CLIP = (body, fi, o, u, pts, ztop) => {
+      if (!DA || DA.bezug !== 'boden' || opts.dachSchnitt === false || DA.geschoss !== fs[fi].id) return [body];
+      const use = DA.ebenen.filter(e => pts.some(([x, y]) => e.a * x + e.b * y + e.c - e.dz < ztop - 5)); if (!use.length) return [body];
+      const X = [u[0], u[1], 0], Y = [-u[1], u[0], 0], loc = v => [dot3(v, X), dot3(v, Y), v[2]]; let r = body;
+      for (const e of use) { const [x, y] = pts[0], q = [x / 1000 - o[0], -y / 1000 - o[1], (e.a * x + e.b * y + e.c - e.dz - elev[fi]) / 1000], nn = nrm([-e.a, e.b, 1]);
+        const pl = E(`IFCPLANE(${E(`IFCAXIS2PLACEMENT3D(${P3(...loc(q))},${D3(...loc(nn))},$)`)})`);
+        r = E(`IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,${r},${E(`IFCHALFSPACESOLID(${pl},.F.)`)})`); }
+      return [r, 'Clipping']; };
     fs.forEach((f, fi) => {
       OFF = stp[f.id] ? [stp[f.id].dx, stp[f.id].dy] : [0, 0];
       const g = { knoten: f.knoten || [], waende: f.waende || [], oeffnungen: f.oeffnungen || [] }, N = new Map(g.knoten.map(k => [k.id, k])), H = f.geschossHoehe_mm || 2800, lichte = f.lichteHoehe_mm || H - 300;
@@ -110,7 +121,8 @@
         // im Bildschirm liegt die S-Seite rechts der Laufrichtung; nach dem Spiegeln von y ist das lokal −Y
         const yS = -ts / 1000, yO = (w.t - ts) / 1000, lp = LP(lpS, A[0], A[1], 0, ux, uy);
         const axis = E(`IFCSHAPEREPRESENTATION(${ctx},'Axis','Curve2D',(${E(`IFCPOLYLINE((${P2(0, 0)},${P2(Lm, 0)}))`)}))`);
-        const wall = E(`IFCWALLSTANDARDCASE(${G('w|' + f.id + '|' + w.id)},${oh},${S((w.ext ? 'Außenwand ' : 'Innenwand ') + CM(w.t) + ' cm')},$,$,${lp},${SH(EX([[x0, yS], [x1, yS], [x1, yO], [x0, yO]], H / 1000, 0), axis)},$)`);
+        const ab = [a, b].flatMap(k => [-1, 1].map(sg => [k.x + OFF[0] - uy * sg * w.t, k.y + OFF[1] - ux * sg * w.t])), [wb0, wt] = CLIP(EX([[x0, yS], [x1, yS], [x1, yO], [x0, yO]], H / 1000, 0), fi, A, [ux, uy], ab, elev[fi] + H);
+        const wall = E(`IFCWALLSTANDARDCASE(${G('w|' + f.id + '|' + w.id)},${oh},${S((w.ext ? 'Außenwand ' : 'Innenwand ') + CM(w.t) + ' cm')},$,$,${lp},${SH(wb0, axis, wt)},$)`);
         els.push(wall);
         const mu = matOf(w.t, 'POSITIVE', -ts); if (!matRel.has(mu)) matRel.set(mu, []); matRel.get(mu).push(wall);
         PS(wall, 'Pset_WallCommon', [['IsExternal', 'IFCBOOLEAN', B(w.ext)], ['LoadBearing', 'IFCBOOLEAN', B(w.ext)]], 'wc|' + f.id + '|' + w.id);
@@ -139,7 +151,8 @@
         const axis = E(`IFCSHAPEREPRESENTATION(${ctx},'Axis','Curve2D',(${E(`IFCPOLYLINE((${P2(0, 0)},${P2(Lm, 0)}))`)}))`);
         const nm = S('Raumtrennung ' + rms[r1].name + ' / ' + rms[r2].name);
         if (opts.trennung !== 'virtuell') {
-          const d = (opts.trennDicke || 20) / 1000, u = (opts.trennUeberstand == null ? 60 : opts.trennUeberstand) / 1000, el = E(`IFCWALLSTANDARDCASE(${G('vt|' + f.id + '|' + w.id)},${oh},${nm},$,${S('Virtuelle Wand')},${lp},${SH(EX([[-u, -d / 2], [Lm + u, -d / 2], [Lm + u, d / 2], [-u, d / 2]], H / 1000, 0), axis)},$)`);
+          const d = (opts.trennDicke || 20) / 1000, u = (opts.trennUeberstand == null ? 60 : opts.trennUeberstand) / 1000, ex = [a, b].map((k, i) => [k.x + OFF[0] + (i ? 1 : -1) * (b.x - a.x) / L0 * 100, k.y + OFF[1] + (i ? 1 : -1) * (b.y - a.y) / L0 * 100]);
+          const [tb, tt] = CLIP(EX([[-u, -d / 2], [Lm + u, -d / 2], [Lm + u, d / 2], [-u, d / 2]], H / 1000, 0), fi, A, [ux, uy], ex, elev[fi] + H), el = E(`IFCWALLSTANDARDCASE(${G('vt|' + f.id + '|' + w.id)},${oh},${nm},$,${S('Virtuelle Wand')},${lp},${SH(tb, axis, tt)},$)`);
           els.push(el); const mu = matOf(Math.round(d * 1000), 'POSITIVE', -d * 500); if (!matRel.has(mu)) matRel.set(mu, []); matRel.get(mu).push(el);
           PS(el, 'Pset_WallCommon', [['IsExternal', 'IFCBOOLEAN', B(false)], ['LoadBearing', 'IFCBOOLEAN', B(false)]], 'vc|' + f.id + '|' + w.id);
         } else {
@@ -147,8 +160,8 @@
         }
       }
       for (const r of rms) {
-        raumNr++; const q = ccw(r.kontur.map(W)), key = f.id + '|' + raumNr;
-        const s = E(`IFCSPACE(${G('sp|' + f.id + '|' + (r.bestandsaufnahmeId || r.mitte.join(',')))},${oh},${S(String(raumNr).padStart(2, '0'))},${S(r.nutzung || '')},$,${LP(lpS, 0, 0, 0)},${SH(EX(q, (r.hoehe_mm || lichte) / 1000, 0))},${S(r.name + (r.beheizt === 'nein' ? ' (unbeheizt)' : r.temp != null ? ' (' + String(r.temp).replace('.', ',') + ' °C)' : ''))},.ELEMENT.,.INTERNAL.,$)`);
+        raumNr++; const q = ccw(r.kontur.map(W)), key = f.id + '|' + raumNr, [rb, rt] = CLIP(EX(q, (r.hoehe_mm || lichte) / 1000, 0), fi, [0, 0], [1, 0], r.kontur.map(c => [c[0] + OFF[0], c[1] + OFF[1]]), elev[fi] + (r.hoehe_mm || lichte));
+        const s = E(`IFCSPACE(${G('sp|' + f.id + '|' + (r.bestandsaufnahmeId || r.mitte.join(',')))},${oh},${S(String(raumNr).padStart(2, '0'))},${S(r.nutzung || '')},$,${LP(lpS, 0, 0, 0)},${SH(rb, null, rt)},${S(r.name + (r.beheizt === 'nein' ? ' (unbeheizt)' : r.temp != null ? ' (' + String(r.temp).replace('.', ',') + ' °C)' : ''))},.ELEMENT.,.INTERNAL.,$)`);
         sp.push(s); (ZON[r.beheizt === 'nein' ? 'Unbeheizt' : r.temp != null ? 'Beheizt ' + String(r.temp).replace('.', ',') + ' °C' : 'Beheizt'] ||= []).push(s);
         PS(s, 'Pset_SpaceThermalDesign', [['HeatingDryBulb', 'IFCTHERMODYNAMICTEMPERATUREMEASURE', r.beheizt === 'nein' || r.temp == null ? null : R(r.temp)]], 'td|' + key);
         PS(s, 'Gebaeudemodell', [['Raumnummer', 'IFCINTEGER', raumNr], ['Flaeche', 'IFCAREAMEASURE', R(Math.round(r.flaeche_m2 * 100) / 100)], ['LichteHoehe', 'IFCLENGTHMEASURE', M(r.hoehe_mm || lichte)], ['Beheizt', 'IFCBOOLEAN', B(r.beheizt !== 'nein')]], 'gm|' + key);
@@ -156,7 +169,8 @@
       // Rohdecke über dem Geschoss (bzw. oberste Geschossdecke) und Bodenplatte unter dem untersten Geschoss
       const um = f.umriss || GM.umriss(g), rd = f.rohdecke_mm;
       if (um.length >= 3 && rd > 0) {
-        const q = ccw(um.map(W)), sl = E(`IFCSLAB(${G('sl|' + f.id)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, rd / 1000, (H - rd) / 1000))},$,.FLOOR.)`);
+        const q = ccw(um.map(W)), [db, dt] = CLIP(EX(q, rd / 1000, (H - rd) / 1000), fi, [0, 0], [1, 0], um.map(c => [c[0] + OFF[0], c[1] + OFF[1]]), elev[fi] + H) /* Kehlbalkenlage im ausgebauten Dach */;
+        const sl = E(`IFCSLAB(${G('sl|' + f.id)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(db, null, dt)},$,.FLOOR.)`);
         els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id);
       }
       if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) {
@@ -187,7 +201,7 @@
           const sl = E(`IFCSLAB(${G('df|' + f.id + '|s')},${oh},${S('Satteldach')},$,$,${pl},${SH(body)},$,.ROOF.)`); parts.push(sl);
           PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)]], 'dfc|' + f.id + '|s');
         }
-        const RT = { sattel: 'GABLE_ROOF', pult: 'SHED_ROOF', flach: 'FLAT_ROOF' }[DA.form] || 'NOTDEFINED';
+        const RT = { sattel: 'GABLE_ROOF', pult: 'SHED_ROOF', flach: 'FLAT_ROOF', walm: 'HIP_ROOF', zelt: 'PAVILION_ROOF' }[DA.form] || 'NOTDEFINED';
         if (opts.dachJeFlaeche) parts.forEach((sl, k) => { const r = E(`IFCROOF(${G('roof|' + f.id + '|' + k)},${oh},${S('Dach ' + (k + 1))},$,$,${LP(lpS, 0, 0, 0)},$,$,.${RT}.)`); AG(r, [sl], 'roof|' + f.id + '|' + k); els.push(r); });
         else { const roof = E(`IFCROOF(${G('roof|' + f.id)},${oh},${S('Dach')},$,$,${LP(lpS, 0, 0, 0)},$,$,.${RT}.)`); AG(roof, parts, 'roof|' + f.id); els.push(roof); }
         const allp = DA.waende.flatMap(w => w.pts), mid = allp.reduce((a, c) => [a[0] + c[0], a[1] + c[1]], [0, 0]).map(v => v / Math.max(1, allp.length));

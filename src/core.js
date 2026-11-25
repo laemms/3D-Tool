@@ -357,7 +357,7 @@
     const t = Math.tan(Math.max(0, Math.min(75, Number(d.neigung) || 0)) * Math.PI / 180), ut = Number(d.ueberTraufe) || 0, uo = Number(d.ueberOrtgang) || 0;
     const tw = Math.max(...top.waende.filter(w => w.ext && !isHilf(w)).map(w => w.t), 240);
     // First entlang x (Traufen an y0/y1) oder entlang y; intern immer „First entlang a“, b = quer dazu
-    const alongX = (d.first === 'quer') !== ((x1 - x0) >= (y1 - y0));
+    const walm = d.form === 'walm' || d.form === 'zelt', alongX = walm ? (x1 - x0) >= (y1 - y0) : (d.first === 'quer') !== ((x1 - x0) >= (y1 - y0)); /* Walm: First immer längs */
     const P = (a, b, z) => (alongX ? [a, b, z] : [b, a, z]), A0 = alongX ? x0 : y0, A1 = alongX ? x1 : y1, B0 = alongX ? y0 : x0, B1 = alongX ? y1 : x1, bm = (B0 + B1) / 2;
     const flaechen = [], waende = [];
     if (d.form === 'flach') {
@@ -372,6 +372,14 @@
         waende.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, B1, zAt(B1))]]);
         waende.push(['Giebelwand', [P(A1, B0, zb), P(A1, B1, zb), P(A1, B1, zAt(B1)), P(A1, B0, ze)]]);
       }
+    } else if (walm) { /* Walm- und Zeltdach: Traufe ringsum gleich hoch, Überstand Traufe auf allen Seiten */
+      const a0 = A0 - ut, a1 = A1 + ut, b0 = B0 - ut, b1 = B1 + ut, zt = ze - ut * t, hb = (b1 - b0) / 2, zr = zt + hb * t;
+      let r0 = a0 + hb, r1 = a1 - hb; if (d.form === 'zelt' || r1 - r0 < 10) r0 = r1 = (a0 + a1) / 2;
+      const zp = r1 - r0 < 10 ? zt + Math.min(hb, (a1 - a0) / 2) * t : zr; /* Zeltdach auf Rechteck: Spitze über der Mitte, die steileren Seiten bestimmen die Höhe */
+      const L1 = [P(a0, b0, zt), P(a1, b0, zt), P(r1, bm, zp)], L2 = [P(a1, b1, zt), P(a0, b1, zt), P(r0, bm, zp)];
+      if (r1 > r0) { L1.push(P(r0, bm, zp)); L2.push(P(r1, bm, zp)); }
+      flaechen.push(L1, L2, [P(a0, b1, zt), P(a0, b0, zt), P(r0, bm, zp)], [P(a1, b0, zt), P(a1, b1, zt), P(r1, bm, zp)]);
+      if (d.bezug !== 'boden' && ze > zb + 10) [[A0, B0, A1, B0], [A1, B0, A1, B1], [A1, B1, A0, B1], [A0, B1, A0, B0]].forEach(([p0, q0, p1, q1]) => waende.push(['Kniestock', [P(p0, q0, zb), P(p1, q1, zb), P(p1, q1, ze), P(p0, q0, ze)]]));
     } else { // Satteldach
       const zr = ze + (bm - B0) * t, zt = ze - ut * t;
       flaechen.push([P(A0 - uo, B0 - ut, zt), P(A1 + uo, B0 - ut, zt), P(A1 + uo, bm, zr), P(A0 - uo, bm, zr)]);
@@ -385,9 +393,15 @@
     const R = q => q.map(v => Math.round(v)), dk = Number(d.dicke) || 250, dz = d.form === 'flach' ? dk : dk / Math.cos(Math.atan(t));
     // Wände enden an der Dachunterseite (Dachfläche = Oberseite)
     const wl = waende.map(([name, f]) => { const g = f.map(q => (q[2] > zb + 1 ? [q[0], q[1], Math.max(zb, q[2] - dz)] : q)).filter((q, i, a) => { const r = a[(i + 1) % a.length]; return Math.hypot(q[0] - r[0], q[1] - r[1], q[2] - r[2]) > 1; }); return { name, pts: g }; }).filter(w => w.pts.length >= 3 && w.pts.some(q => q[2] > zb + 1));
-    return { form: d.form, geschoss: top.id, dicke: dk, wanddicke: tw, flaechen: flaechen.map(f => f.map(R)), waende: wl.map(w => ({ name: w.name, pts: w.pts.map(R) })), firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
+    // Ebenen der Dachoberseiten z = a·x + b·y + c (mm) mit lotrechter Dicke dz: die Dachunterseite ist das Minimum über alle Ebenen (konvexes Dach)
+    const ebenen = flaechen.map(f => { const [p0, p1] = f, p2 = f.find((q, i) => i > 1 && Math.abs((p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0])) > 1);
+      const det = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]), a = ((p1[2] - p0[2]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[2] - p0[2])) / det, b = ((p1[0] - p0[0]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[0] - p0[0])) / det;
+      return { a, b, c: p0[2] - a * p0[0] - b * p0[1], dz: dk * Math.hypot(1, a, b) }; });
+    return { form: d.form, bezug: d.bezug === 'boden' ? 'boden' : 'decke', ebenen, geschoss: top.id, dicke: dk, wanddicke: tw, flaechen: flaechen.map(f => f.map(R)), waende: wl.map(w => ({ name: w.name, pts: w.pts.map(R) })), firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
   }
 
-  const api = { dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  /* Höhe der Dachunterseite über ±0 an einem Punkt (mm, Modellkoordinaten); Infinity ohne Dach */
+  function dachUnten(DA, x, y) { return DA && DA.ebenen && DA.ebenen.length ? Math.min(...DA.ebenen.map(e => e.a * x + e.b * y + e.c - e.dz)) : Infinity; }
+  const api = { dachUnten, dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

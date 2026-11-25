@@ -105,7 +105,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <section class="card" id="pruefcard"><h2 id="pruef-h">Prüfung</h2><div id="pruef" class="small"></div></section>
     <section class="card" id="dachcard"><h2>Dach</h2>
       <div class="gridlab">
-        <label class="small" for="d-form">Form</label><select id="d-form"><option value="sattel">Satteldach</option><option value="pult">Pultdach</option><option value="flach">Flachdach</option><option value="kein">kein Dach</option></select>
+        <label class="small" for="d-form">Form</label><select id="d-form"><option value="sattel">Satteldach</option><option value="walm">Walmdach</option><option value="zelt">Zeltdach</option><option value="pult">Pultdach</option><option value="flach">Flachdach</option><option value="kein">kein Dach</option></select>
         <label class="small" for="d-neig">Neigung °</label><input id="d-neig" inputmode="decimal">
         <label class="small" for="d-first">First</label><select id="d-first"><option value="lang">parallel zur langen Seite</option><option value="quer">parallel zur kurzen Seite</option></select>
         <label class="small" for="d-knie">Kniestock cm</label><input id="d-knie" inputmode="decimal">
@@ -362,7 +362,8 @@ function draw2d() {
 /* ---------- Dach ---------- */
 const DF = [['d-form', 'form'], ['d-neig', 'neigung', 1], ['d-first', 'first'], ['d-knie', 'kniestock', 10], ['d-ut', 'ueberTraufe', 10], ['d-uo', 'ueberOrtgang', 10], ['d-dicke', 'dicke', 10], ['d-bezug', 'bezug']];
 function renderDach() { const d = st.dach || {}; for (const [id, k, f] of DF) { const el = $(id); if (document.activeElement === el) continue; el.value = f ? String(Math.round((d[k] || 0) / f * 10) / 10).replace('.', ',') : d[k]; }
-  const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). Grundriss: Außenumriss als Rechteck.' : 'Kein Dach im Modell.'; }
+  const walm = d.form === 'walm' || d.form === 'zelt'; $('d-first').disabled = walm || d.form === 'flach' || d.form === 'kein'; $('d-uo').disabled = walm || d.form === 'kein';
+  const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). Grundriss: Außenumriss als Rechteck.' + (walm ? ' Walm: First längs, Überstand Traufe ringsum.' : '') + (r.bezug === 'boden' ? ' Wände und Räume des Dachgeschosses enden an der Dachunterseite.' : '') : 'Kein Dach im Modell.'; }
 for (const [id, k, f] of DF) $(id).addEventListener('change', e => { const v = f ? num(e.target.value) : e.target.value; if (f && (v == null || v < 0)) { renderDach(); return; } st.dach = { ...st.dach, [k]: f ? Math.round(v * f) : v, gesetzt: true }; st.dirty = true; scheduleSave(); renderDach(); if (st.view === 'haus') draw3d(); });
 /* ---------- Prüfung (wie vor dem Raumtool-Import) ---------- */
 function renderPruefung() {
@@ -460,17 +461,29 @@ async function draw3d() {
   const mSlab = new T.MeshLambertMaterial({ color: col('--w3i'), transparent: true, opacity: 0.55 }), mRoof = new T.MeshLambertMaterial({ color: new T.Color(0xb5523b), side: T.DoubleSide }); probe.remove();
   // Haus: alle Geschosse übereinander (wie im IFC), sonst nur das gewählte Geschoss
   const haus = st.view === 'haus', doc = modelDoc(), stp = GM.stapeln(doc.geschosse.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })));
+  const DA = haus ? GM.dach(doc, st.dach) : null;
   const list = haus ? st.floors : [fl()]; let x0 = 1e12, z0 = 1e12, x1 = -1e12, z1 = -1e12, yTop = 0, yBot = 0;
   for (const f of list) {
     const g = f.g, N = new Map(g.knoten.map(n => [n.id, n])), D = doc.geschosse.find(x => x.id === f.id) || {}, Hw = D.geschossHoehe_mm || f.h || 2800, off = haus ? stp[f.id] || { dx: 0, dy: 0 } : { dx: 0, dy: 0 }, fg = new T.Group();
     fg.position.set(off.dx, haus ? D.niveau_mm || 0 : 0, off.dy); grp.add(fg); yTop = Math.max(yTop, (haus ? D.niveau_mm || 0 : 0) + Hw); yBot = Math.min(yBot, haus ? D.niveau_mm || 0 : 0);
-    const piece = (w, s0, s1, za, zb, m) => { if (s1 - s0 < 5 || zb - za < 5) return; const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], S = [-u[1], u[0]], ts = w.ts == null ? w.t / 2 : w.ts, sh = ts - w.t / 2, c = (s0 + s1) / 2;
+    // ausgebautes Dach: Wände des obersten Geschosses enden an der Dachunterseite (wie im IFC)
+    const cut = DA && DA.bezug === 'boden' && DA.geschoss === f.id ? (x, y) => GM.dachUnten(DA, x + off.dx, y + off.dy) - (D.niveau_mm || 0) : null;
+    const piece = (w, s0, s1, za, zb, m) => { if (s1 - s0 < 5 || zb - za < 5) return; if (cut) return pieceCut(w, s0, s1, za, zb, m); const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], S = [-u[1], u[0]], ts = w.ts == null ? w.t / 2 : w.ts, sh = ts - w.t / 2, c = (s0 + s1) / 2;
       const mesh = new T.Mesh(new T.BoxGeometry(s1 - s0, zb - za, Math.max(w.t, 20)), m); mesh.position.set(a.x + u[0] * c + S[0] * sh, (za + zb) / 2, a.y + u[1] * c + S[1] * sh); mesh.rotation.y = -Math.atan2(u[1], u[0]); fg.add(mesh); };
+    const pieceCut = (w, s0, s1, za, zb, m) => { const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], ts = w.ts == null ? w.t / 2 : w.ts, tt = Math.max(w.t, 20);
+      // Oberkante entlang der Achse: Minimum aus zb und den Dachebenen (stückweise linear), Knicke an Schnittpunkten
+      const at = s => [a.x + u[0] * s, a.y + u[1] * s], lin = DA.ebenen.map(e => { const p0 = at(0), p1 = at(1), v0 = e.a * (p0[0] + off.dx) + e.b * (p0[1] + off.dy) + e.c - e.dz - (D.niveau_mm || 0); return [v0, e.a * u[0] + e.b * u[1]]; });
+      const ss = [s0, s1]; lin.forEach((p, i) => { if (Math.abs(p[1]) > 1e-9) ss.push((zb - p[0]) / p[1]); lin.forEach((q, k) => { if (k > i && Math.abs(p[1] - q[1]) > 1e-9) ss.push((q[0] - p[0]) / (p[1] - q[1])); }); });
+      const top = s => Math.min(zb, ...lin.map(p => p[0] + p[1] * s)), pts = [...new Set(ss.filter(s => s >= s0 && s <= s1).map(s => Math.round(s * 10) / 10))].sort((x, y) => x - y).map(s => [s, Math.max(za, top(s))]);
+      if (!pts.some(q => q[1] > za + 5)) return;
+      const sh = new T.Shape([new T.Vector2(s0, za), ...pts.map(q => new T.Vector2(q[0], q[1])), new T.Vector2(s1, za)].filter((v, i, A) => i === 0 || v.distanceTo(A[i - 1]) > 0.5));
+      const ms = new T.Mesh(new T.ExtrudeGeometry(sh, { depth: tt, bevelEnabled: false }), m), S = [-u[1], u[0]], o0 = ts - w.t; ms.matrixAutoUpdate = false;
+      ms.matrix.makeBasis(new T.Vector3(u[0], 0, u[1]), new T.Vector3(0, 1, 0), new T.Vector3(S[0], 0, S[1])).setPosition(a.x + S[0] * o0, 0, a.y + S[1] * o0); fg.add(ms); };
     for (const w of g.waende.filter(x => !GM.isHilf(x))) { const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), m = w.ext ? mExt : mIn, ops = g.oeffnungen.filter(o => o.wand === w.id).map(o => ({ ...o, s0: Math.max(0, o.abstand), s1: Math.min(L, o.abstand + o.breite) })).sort((x, y) => x.s0 - y.s0);
       let c = 0; for (const o of ops) { piece(w, c, o.s0, 0, Hw, m); piece(w, o.s0, o.s1, 0, o.brh, m); piece(w, o.s0, o.s1, o.brh + o.hoehe, Hw, m); if (!/tuer/.test(o.typ || '') || o.typ === 'fenstertuer') piece(w, o.s0, o.s1, o.brh, o.brh + o.hoehe, mWin); c = o.s1; } piece(w, c, L, 0, Hw, m); }
-    for (const c of GM.nodeCaps(g)) { const geo = new T.ExtrudeGeometry(new T.Shape(c.poly.map(q => new T.Vector2(q[0], q[1]))), { depth: Hw, bevelEnabled: false }), ms = new T.Mesh(geo, c.ext ? mExt : mIn); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; fg.add(ms); }
+    for (const c of GM.nodeCaps(g)) { const hc = cut ? Math.min(Hw, ...c.poly.map(q => cut(q[0], q[1]))) : Hw; if (hc < 5) continue; const geo = new T.ExtrudeGeometry(new T.Shape(c.poly.map(q => new T.Vector2(q[0], q[1]))), { depth: hc, bevelEnabled: false }), ms = new T.Mesh(geo, c.ext ? mExt : mIn); ms.rotation.x = Math.PI / 2; ms.position.y = hc; fg.add(ms); }
     for (const r of GM.roomsWithMeta(g, f.meta)) { const ms = new T.Mesh(new T.ShapeGeometry(new T.Shape(r.kontur.map(q => new T.Vector2(q[0], q[1])))), mFl); ms.rotation.x = Math.PI / 2; ms.position.y = 2; fg.add(ms); }
-    if (haus && D.rohdecke_mm > 0) { const u = GM.umriss(g); if (u.length >= 3) { const ms = new T.Mesh(new T.ExtrudeGeometry(new T.Shape(u.map(q => new T.Vector2(q[0], q[1]))), { depth: D.rohdecke_mm, bevelEnabled: false }), mSlab); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; fg.add(ms); } }
+    if (haus && D.rohdecke_mm > 0 && !cut) { const u = GM.umriss(g); if (u.length >= 3) { const ms = new T.Mesh(new T.ExtrudeGeometry(new T.Shape(u.map(q => new T.Vector2(q[0], q[1]))), { depth: D.rohdecke_mm, bevelEnabled: false }), mSlab); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; fg.add(ms); } }
     g.knoten.forEach(n => { x0 = Math.min(x0, n.x + off.dx); x1 = Math.max(x1, n.x + off.dx); z0 = Math.min(z0, n.y + off.dy); z1 = Math.max(z1, n.y + off.dy); });
   }
   // Dach: ebene Platten aus 3D-Polygonen (Modell: x, y im Plan, z oben → three: x, y oben, z)
@@ -478,7 +491,6 @@ async function draw3d() {
     if (inward) { if (Nn.dot(inward.clone().sub(O)) < 0) Nn.negate(); } else if (Nn.y < 0) Nn.negate();
     const Y = Nn.clone().cross(X), sh = new T.Shape(P.map(q => { const d = q.clone().sub(O); return new T.Vector2(d.dot(X), d.dot(Y)); }));
     const ms = new T.Mesh(new T.ExtrudeGeometry(sh, { depth, bevelEnabled: false }), m); ms.matrixAutoUpdate = false; ms.matrix.makeBasis(X, Y, Nn).setPosition(inward ? O : O.clone().addScaledVector(Nn, -depth)); grp.add(ms); };
-  const DA = haus ? GM.dach(doc, st.dach) : null;
   if (DA) { DA.flaechen.forEach(q => plate(q, DA.dicke, mRoof)); const all = DA.waende.flatMap(w => w.pts), c = all.length ? new T.Vector3(all.reduce((a, q) => a + q[0], 0) / all.length, 0, all.reduce((a, q) => a + q[1], 0) / all.length) : null;
     DA.waende.forEach(w => { const cc = c.clone(); cc.y = w.pts[0][2]; plate(w.pts, DA.wanddicke, mExt, cc); }); yTop = Math.max(yTop, DA.firsthoehe); }
   if (x1 < x0) { x0 = z0 = 0; x1 = z1 = 8000; }
