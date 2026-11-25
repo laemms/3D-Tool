@@ -357,12 +357,13 @@
     const inPoly = (x, y) => { let c = false; for (let i = 0, j = u.length - 1; i < u.length; j = i++) { const [a, b] = u[i], [e, f] = u[j]; if ((b > y) !== (f > y) && x < (e - a) * (y - b) / (f - b) + a) c = !c; } return c; };
     const cell = []; for (let i = 0; i < nx; i++) { cell.push([]); for (let j = 0; j < ny; j++) cell[i].push(inPoly((X[i] + X[i + 1]) / 2, (Y[j] + Y[j + 1]) / 2) ? 1 : 0); }
     const teile = [];
-    for (let n = 0; n < 4; n++) { let best = null;
+    for (let n = 0; n < 6; n++) { let best = null;
       for (let i0 = 0; i0 < nx; i0++) for (let j0 = 0; j0 < ny; j0++) for (let i1 = i0; i1 < nx; i1++) { if (!cell[i1][j0]) break; for (let j1 = j0; j1 < ny; j1++) {
         let ok = true; for (let i = i0; i <= i1 && ok; i++) if (cell[i][j1] !== 1) ok = false; if (!ok) break;
         let full = true; for (let i = i0; i <= i1 && full; i++) for (let j = j0; j <= j1; j++) if (cell[i][j] !== 1) { full = false; break; } if (!full) break;
         const w = X[i1 + 1] - X[i0], h = Y[j1 + 1] - Y[j0]; if (!best || w * h > best.A) best = { A: w * h, i0, i1, j0, j1, w, h }; } }
-      if (!best || Math.min(best.w, best.h) < 1500 || best.A < 4e6) break;
+      // Hauptteil und Anbauten ab 1,5 m Breite und 4 m²; danach auch kleine Vorbauten/Erker (ab 0,5 m, 1 m²) – die bekommen Pult- oder Schleppdach
+      if (!best || (teile.length === 0 ? Math.min(best.w, best.h) < 1500 || best.A < 4e6 : Math.min(best.w, best.h) < 500 || best.A < 1e6)) break;
       for (let i = best.i0; i <= best.i1; i++) for (let j = best.j0; j <= best.j1; j++) cell[i][j] = 2;
       teile.push({ x0: X[best.i0], y0: Y[best.j0], x1: X[best.i1 + 1], y1: Y[best.j1 + 1] }); }
     return teile;
@@ -402,7 +403,10 @@
         alongX = innen ? innen[0] === 'x' : lx >= ly;
         // schmaler Streifen am Nachbarn (Vorbau, Abseite): Schleppdach an der Traufseite des Nachbarn, Pultdach an dessen Giebelseite
         if (innen && d.form !== 'flach') { const proj = innen[0] === 'x' ? lx : ly, along = innen[0] === 'x' ? ly : lx;
-          if (proj < 2500 || proj < 0.4 * along) { const parallel = nb.alongX === (innen[0] === 'y'); teile.push({ r, alongX: innen[0] === 'y', kontakt: innen, nb, typ: parallel ? 'schlepp' : 'pult', hoch: innen[1] === '0' ? 'b0' : 'b1', ext: 0 }); return; } } }
+          if (proj < 2500 || proj < 0.4 * along) {
+            // Schleppdach, wenn der Nachbar an der Kontaktkante eine zu ihm hin ansteigende Fläche hat (Traufe oder Walm), sonst Pultdach (Giebel)
+            const R = nb.r, inw = { x0: [-1, 0], x1: [1, 0], y0: [0, -1], y1: [0, 1] }[innen], mx = innen[0] === 'x' ? [innen === 'x0' ? r.x0 - 100 : r.x1 + 100, (Math.max(r.y0, R.y0) + Math.min(r.y1, R.y1)) / 2] : [(Math.max(r.x0, R.x0) + Math.min(r.x1, R.x1)) / 2, innen === 'y0' ? r.y0 - 100 : r.y1 + 100];
+            teile.push({ r, alongX: innen[0] === 'y', kontakt: innen, nb, typ: 'streifen', hoch: innen[1] === '0' ? 'b0' : 'b1', ext: 0, mx, inw }); return; } } }
       teile.push({ r, alongX, innen, nb, ext: 0 }); });
     // Fläche(n) eines Teils; das innere Ende (am Nachbarn) läuft um ext in den Nachbarn hinein, ohne Überstand, ohne Walm, ohne Giebelwand
     const bauen = T => { const { r, alongX } = T, P = (a, b, z) => (alongX ? [a, b, z] : [b, a, z]);
@@ -410,11 +414,17 @@
       const in0 = T.innen === (alongX ? 'x0' : 'y0'), in1 = T.innen === (alongX ? 'x1' : 'y1'), a0e = in0 ? A0 - T.ext : A0, a1e = in1 ? A1 + T.ext : A1;
       const o0 = in0 ? 0 : walm ? ut : uo, o1 = in1 ? 0 : walm ? ut : uo, fl = [], wa = [], fp = alongX ? [a0e - o0, B0 - ut, a1e + o1, B1 + ut] : [B0 - ut, a0e - o0, B1 + ut, a1e + o1];
       const kn = (p0, q0, p1, q1, side) => wa.push(['Kniestock', [P(p0, q0, zb), P(p1, q1, zb), P(p1, q1, ze), P(p0, q0, ze)], side]);
+      if (T.typ === 'streifen') { const pl = T.nb.eb.reduce((m, e) => (e.a * T.mx[0] + e.b * T.mx[1] + e.c < m.a * T.mx[0] + m.b * T.mx[1] + m.c ? e : m));
+        /* kalter Dachraum: Erker/Vorbau bekommt ein Pultdach, Traufe auf Höhe der Geschossdecke, Neigung höchstens bis an das Nachbardach
+           (ein Schleppdach würde unter die Decke reichen). Ausgebautes Dach: Schleppdach (Abseite) an Traufe oder Walm, Pultdach am Giebel. */
+        const proj = T.alongX ? T.r.y1 - T.r.y0 : T.r.x1 - T.r.x0, zN = pl.a * T.mx[0] + pl.b * T.mx[1] + pl.c;
+        if (d.bezug !== 'boden') { T.typ = 'pult'; T.sp = Math.max(0.03, Math.min(t, (zN - ze) / Math.max(proj, 1))); }
+        else T.typ = pl.a * T.inw[0] + pl.b * T.inw[1] > 0.05 ? 'schlepp' : 'pult'; }
       if (T.typ) { // Streifen: Pult- oder Schleppdach, hohe Seite am Nachbarn, kein Überstand zum Nachbarn hin
         const hb0 = T.hoch === 'b0', bLo = hb0 ? B1 + ut : B0 - ut, bHi = hb0 ? B0 : B1; let zAt;
-        if (T.typ === 'schlepp') { const N = T.nb, mx = alongX ? [(A0 + A1) / 2, hb0 ? B0 - 100 : B1 + 100] : [hb0 ? B0 - 100 : B1 + 100, (A0 + A1) / 2], pick = N.eb.reduce((m, e) => (e.a * mx[0] + e.b * mx[1] + e.c < m.a * mx[0] + m.b * mx[1] + m.c ? e : m));
+        if (T.typ === 'schlepp') { const N = T.nb, mx = T.mx, pick = N.eb.reduce((m, e) => (e.a * mx[0] + e.b * mx[1] + e.c < m.a * mx[0] + m.b * mx[1] + m.c ? e : m));
           zAt = (a, b) => { const [x, y] = alongX ? [a, b] : [b, a]; return pick.a * x + pick.b * y + pick.c; }; }
-        else zAt = (a, b) => ze + (hb0 ? B1 - b : b - B0) * t;
+        else zAt = (a, b) => ze + (hb0 ? B1 - b : b - B0) * (T.sp == null ? t : T.sp);
         const q = [[A0 - uo, bLo], [A1 + uo, bLo], [A1 + uo, bHi], [A0 - uo, bHi]];
         fl.push(q.map(([a, b]) => P(a, b, zAt(a, b))));
         if (d.bezug !== 'boden' && T.typ === 'pult' && ze > zb + 10) kn(A0, hb0 ? B1 : B0, A1, hb0 ? B1 : B0, hb0 ? 'b1' : 'b0');

@@ -52,6 +52,12 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Raumzonen (IfcZone) nach Beheizung: „Unbeheizt“, „Beheizt 20 °C“ … Raumtool 3D übernimmt sie als Raum-Zone.
   Die Konditionierung (beheizt/unbeheizt) übernimmt Raumtool aus der IFC nicht (getestet: Zone, ObjectType,
   Pset_SpaceThermalRequirements); U-Werte setzt Chris in der Heizlast (H73), deshalb keine U-Werte im IFC.
+- Eigene Testhäuser (`tools/testhaeuser.js`, Test `test/testhaeuser.test.js`, keine Kundendaten): A = KG/EG/ausgebautes DG mit
+  Satteldach, B = Erker und 45°-Ecke mit Walmdach, C = Staffelgeschoss mit Pultdach. `node tools/testhaeuser.js <ordner>` schreibt IFC
+  und Prüfdaten. Raumtool 3D (25.11.2026): alle drei 0 Fehler, Geschosse aufeinander, Volumen wie Modell (< 0,6 %).
+  Erkenntnisse: schräge Ecken überlappen an den rechtwinkligen Wandenden (Raumtool unkritisch, Prüfung nur Info); Erker und schmale
+  Vorbauten bekommen beim kalten Dach ein flaches Pultdach auf Deckenhöhe, beim ausgebauten Dach ein Schleppdach (Abseite);
+  Geschossteile ohne Geschoss darüber (Staffel, Anbau) haben kein Dach aus dem Modell – Prüfung weist darauf hin.
 - Dach v3 – L-, T-, U-Grundrisse (`teileModus: 'auto'`, Standard): `GM.dachTeile` zerlegt den Umriss in Rechtecke (Versätze < 50 cm
   gebündelt, Reste < 1,5 m Breite oder < 4 m² ohne eigenes Dach). Hauptteil = größtes Rechteck; Anbauten mit First senkrecht zur
   gemeinsamen Kante, inneres Ende so weit in den Nachbarn verlängert, bis der Giebel unter dessen Dach verschwindet. Sichtbare Flächen =

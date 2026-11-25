@@ -1,2 +1,2 @@
 { "name": "cl-gebaeudemodell", "private": true, "version": "0.0.1",
-  "scripts": { "test": "node test/core.test.js", "build": "node build.js" } }
+  "scripts": { "test": "node test/core.test.js && node test/ifc.test.js && node test/testhaeuser.test.js", "build": "node build.js" } }

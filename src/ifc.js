@@ -268,7 +268,13 @@
         body[w.id] = ccwq([[A[0] + S[0] * ts, A[1] + S[1] * ts], [Bp[0] + S[0] * ts, Bp[1] + S[1] * ts], [Bp[0] - S[0] * (w.t - ts), Bp[1] - S[1] * (w.t - ts)], [A[0] - S[0] * (w.t - ts), A[1] - S[1] * (w.t - ts)]]); len[w.id] = [-e.a, L + e.b]; }
       // Wandkörper überschneiden sich
       const ids = Object.keys(body);
-      for (let i = 0; i < ids.length; i++) for (let k = i + 1; k < ids.length; k++) { const A = clip(body[ids[i]], body[ids[k]]); if (A > 20000) add('warn', 'Wände überschneiden sich (' + (A / 1e6).toFixed(2).replace('.', ',') + ' m²)', { kind: 'wall', id: ids[i] }); }
+      // schräge Ecke zweier Wände (kein rechter Winkel): rechtwinklig abgeschnittene Wandenden überlappen zwangsläufig ein wenig
+      const schraeg = (w1, w2) => { const k = [w1.a, w1.b].find(x => x === w2.a || x === w2.b); if (!k) return false; const d = w => { const p = N.get(w.a === k ? w.a : w.b), q = N.get(w.a === k ? w.b : w.a), L = Math.hypot(q.x - p.x, q.y - p.y); return [(q.x - p.x) / L, (q.y - p.y) / L]; };
+        const c = Math.abs(d(w1)[0] * d(w2)[0] + d(w1)[1] * d(w2)[1]); return c > 0.05 && c < 0.995 && g.waende.filter(w => !GM.isHilf(w) && (w.a === k || w.b === k)).length === 2; };
+      const W = new Map(g.waende.map(w => [w.id, w]));
+      for (let i = 0; i < ids.length; i++) for (let k = i + 1; k < ids.length; k++) { const A = clip(body[ids[i]], body[ids[k]]); if (A <= 20000) continue;
+        if (schraeg(W.get(ids[i]), W.get(ids[k])) && A < 0.5 * Math.max(W.get(ids[i]).t, W.get(ids[k]).t) ** 2) add('info', 'Schräge Ecke: Wandenden überlappen ' + (A / 1e6).toFixed(2).replace('.', ',') + ' m² (rechtwinklige Wandenden, für Raumtool unkritisch)', { kind: 'wall', id: ids[i] });
+        else add('warn', 'Wände überschneiden sich (' + (A / 1e6).toFixed(2).replace('.', ',') + ' m²)', { kind: 'wall', id: ids[i] }); }
       // Öffnungen außerhalb der Wand oder übereinander
       const byW = {};
       for (const o of g.oeffnungen) { if (!o.wand) continue; const r = len[o.wand]; if (!r) { if (!g.waende.some(w => w.id === o.wand && !GM.isHilf(w))) continue; add('warn', 'Öffnung liegt in einem Wandstück ohne Körper', { kind: 'open', id: o.id }); continue; }
@@ -289,6 +295,12 @@
     }
     const stp = GM.stapeln(fs.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })));
     for (const f of fs) if (stp[f.id] && stp[f.id].st === 'abw') out.push({ lv: 'info', geschoss: f.id, gname: f.name, text: 'Andere Außenmaße als das Bezugsgeschoss: bleibt wie gezeichnet stehen', sel: null });
+    // Teile eines Geschosses ohne Geschoss darüber (Staffelgeschoss, eingeschossiger Anbau): dort liegt kein Dach aus dem Modell
+    const mit = fs.filter(f => (f.waende || []).some(w => !GM.isHilf(w)));
+    mit.slice(0, -1).forEach((f, i) => { const o = mit[i + 1], so = stp[o.id] || { dx: 0, dy: 0 }, sf = stp[f.id] || { dx: 0, dy: 0 }, uf = GM.umriss(f).map(q => [q[0] + sf.dx, q[1] + sf.dy]), uo = GM.umriss(o).map(q => [q[0] + so.dx, q[1] + so.dy]);
+      if (uf.length < 3 || uo.length < 3) return; const xs = uf.map(q => q[0]), ys = uf.map(q => q[1]), s = 200; let frei = 0;
+      for (let x = Math.min(...xs) + s / 2; x < Math.max(...xs); x += s) for (let y = Math.min(...ys) + s / 2; y < Math.max(...ys); y += s) if (GM.inPoly([x, y], uf) && !GM.inPoly([x, y], uo)) frei += s * s;
+      if (frei > 2e6) out.push({ lv: 'info', geschoss: f.id, gname: f.name, text: 'Rund ' + Math.round(frei / 1e6) + ' m² ohne ' + (o.name || 'Geschoss') + ' darüber: dort grenzt die Decke an Außenluft (Flachdach oder Terrasse in Raumtool anlegen)', sel: null }); });
     return out;
   }
 
