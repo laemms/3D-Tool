@@ -168,7 +168,7 @@
       }
       // Rohdecke über dem Geschoss (bzw. oberste Geschossdecke) und Bodenplatte unter dem untersten Geschoss
       const um = f.umriss || GM.umriss(g), rd = f.rohdecke_mm;
-      if (um.length >= 3 && rd > 0) {
+      if (um.length >= 3 && rd > 20) {
         /* Kehlbalkenlage im ausgebauten Dach: nur der Teil, über dem die Dachunterseite höher als die Decke liegt (Grundriss mit den
            Dachebenen beschnitten – Raumtool 3D übernimmt IfcBooleanClippingResult bei Decken nicht, Test 25.11.2026) */
         const cut = (poly, a, b, c) => { const out = []; poly.forEach((p0, i) => { const p1 = poly[(i + 1) % poly.length], v0 = a * p0[0] + b * p0[1] + c, v1 = a * p1[0] + b * p1[1] + c; if (v0 >= 0) out.push(p0); if ((v0 >= 0) !== (v1 >= 0)) { const t = v0 / (v0 - v1); out.push([p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t]); } }); return out; };
@@ -182,7 +182,7 @@
         polys.forEach((umK, pi) => {
         const kA = umK.length >= 3 ? Math.abs(umK.reduce((s2, c, i) => { const d = umK[(i + 1) % umK.length]; return s2 + c[0] * d[1] - d[0] * c[1]; }, 0)) / 2e6 : 0;
         if (kA <= 0.5) return; const sk = pi ? '|' + pi : '';
-        const q = ccw(umK.map(W)), db = EX(q, rd / 1000, (H - rd) / 1000), dt = null;
+        const q = ccw(umK.map(W)), db = EX(q, rd / 1000, (H - (f.fussboden_mm || 0) - rd) / 1000), dt = null; /* Unterkante = lichte Höhe + Abhängung über OKFF */
         const sl = E(`IFCSLAB(${G('sl|' + f.id + sk)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(db, null, dt)},$,.FLOOR.)`);
         els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id + sk);
         });
@@ -295,6 +295,11 @@
     }
     const stp = GM.stapeln(fs.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })));
     for (const f of fs) if (stp[f.id] && stp[f.id].st === 'abw') out.push({ lv: 'info', geschoss: f.id, gname: f.name, text: 'Andere Außenmaße als das Bezugsgeschoss: bleibt wie gezeichnet stehen', sel: null });
+    // Höhen: Räume unterschiedlich hoch, Rohdecke rechnerisch zu dünn (Geschosshöhe = Fußboden + lichte Höhe + Abhängung + Rohdecke)
+    const mz = v => String(Math.round(v / 10) / 100).replace('.', ',');
+    for (const f of fs) { const rs = (f.raeume || []).map(r => r.hoehe_mm || f.lichteHoehe_mm).filter(v => v > 0), uniq = [...new Set(rs.map(v => Math.round(v / 10) * 10))].sort((a, b) => a - b);
+      if (uniq.length > 1) out.push({ lv: 'info', geschoss: f.id, gname: f.name, text: 'Räume unterschiedlich hoch (' + uniq.map(mz).join(' / ') + ' m): die Decke liegt auf der lichten Höhe des Geschosses (' + mz(f.lichteHoehe_mm || 0) + ' m), höhere Räume reichen in die Decke', sel: null });
+      if (f.rohdecke_mm != null && f.geschossHoehe_mm && f.rohdecke_mm < 100) out.push({ lv: 'warn', geschoss: f.id, gname: f.name, text: 'Rohdecke rechnerisch nur ' + Math.round(f.rohdecke_mm / 10) + ' cm (Geschosshöhe ' + mz(f.geschossHoehe_mm) + ' m − Fußboden − lichte Höhe ' + mz(f.lichteHoehe_mm || 0) + ' m − Abhängung): Höhen in der Bestandsaufnahme prüfen', sel: null }); }
     // Teile eines Geschosses ohne Geschoss darüber (Staffelgeschoss, eingeschossiger Anbau): dort liegt kein Dach aus dem Modell
     const mit = fs.filter(f => (f.waende || []).some(w => !GM.isHilf(w)));
     mit.slice(0, -1).forEach((f, i) => { const o = mit[i + 1], so = stp[o.id] || { dx: 0, dy: 0 }, sf = stp[f.id] || { dx: 0, dy: 0 }, uf = GM.umriss(f).map(q => [q[0] + sf.dx, q[1] + sf.dy]), uo = GM.umriss(o).map(q => [q[0] + so.dx, q[1] + so.dy]);

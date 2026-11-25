@@ -170,14 +170,14 @@ dialog button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border
   <span id="sync" class="sync">Verbinde …</span>
   <span class="grow"></span>
   <nav id="floors" class="seg" aria-label="Geschoss"></nav>
-  <div class="seg views" role="group" aria-label="Ansicht"><button id="v2d" aria-pressed="true"><span class="lg">Grundriss</span><span class="sm">2D</span></button><button id="v3d" aria-pressed="false">3D</button><button id="vhaus" aria-pressed="false" title="Alle Geschosse übereinander mit Dach">Haus</button></div>
+  <div class="seg views" role="group" aria-label="Ansicht"><button id="v2d" aria-pressed="true" title="Grundriss (1)"><span class="lg">Grundriss</span><span class="sm">2D</span></button><button id="v3d" aria-pressed="false" title="Geschoss in 3D (2)">3D</button><button id="vhaus" aria-pressed="false" title="Alle Geschosse übereinander mit Dach (3)">Haus</button></div>
   <button class="pri" id="ifc" title="IFC-Datei für Raumtool 3D erzeugen"><span class="lg">IFC exportieren</span><span class="sm">IFC</span></button>
-  <button class="icon" id="panel-t" aria-pressed="true" title="Seitenleiste ein- oder ausblenden" aria-label="Seitenleiste"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg></button>
+  <button class="icon" id="panel-t" aria-pressed="true" title="Seitenleiste ein- oder ausblenden (S)" aria-label="Seitenleiste"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg></button>
 </header>
 <nav class="float rail" aria-label="Werkzeuge">
-  <button id="t-sel" data-tool="sel" aria-pressed="true" title="Auswählen und Punkte ziehen"><svg viewBox="0 0 24 24"><path d="M6 3.5l12 6.8-5.3 1.4-2.6 5.3z"/></svg><span>Auswahl</span></button>
-  <button id="t-wall" data-tool="wall" aria-pressed="false" title="Wände zeichnen"><svg viewBox="0 0 24 24"><path d="M3.5 8.5h17v7h-17z"/><path d="M3.5 12h17" stroke-dasharray="2 2.2" stroke-width="1.2"/></svg><span>Wand</span></button>
-  <button id="t-open" data-tool="open" aria-pressed="false" title="Fenster und Türen setzen"><svg viewBox="0 0 24 24"><path d="M3 9h5v6H3zM16 9h5v6h-5z"/><path d="M8 12h8" stroke-width="1.2"/></svg><span>Öffnung</span></button>
+  <button id="t-sel" data-tool="sel" aria-pressed="true" title="Auswählen und Punkte ziehen (V)"><svg viewBox="0 0 24 24"><path d="M6 3.5l12 6.8-5.3 1.4-2.6 5.3z"/></svg><span>Auswahl</span></button>
+  <button id="t-wall" data-tool="wall" aria-pressed="false" title="Wände zeichnen (W)"><svg viewBox="0 0 24 24"><path d="M3.5 8.5h17v7h-17z"/><path d="M3.5 12h17" stroke-dasharray="2 2.2" stroke-width="1.2"/></svg><span>Wand</span></button>
+  <button id="t-open" data-tool="open" aria-pressed="false" title="Fenster und Türen setzen (O)"><svg viewBox="0 0 24 24"><path d="M3 9h5v6H3zM16 9h5v6h-5z"/><path d="M8 12h8" stroke-width="1.2"/></svg><span>Öffnung</span></button>
   <hr>
   <button id="undo" title="Rückgängig (Strg+Z)" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 010 11h-3"/></svg><span>Zurück</span></button>
   <button id="redo" title="Wiederholen (Strg+Y)" disabled><svg viewBox="0 0 24 24"><path d="M15 14l4.5-4.5L15 5"/><path d="M19.5 9.5H10a5.5 5.5 0 000 11h3"/></svg><span>Vor</span></button>
@@ -198,14 +198,14 @@ dialog button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border
   <label for="o-h">Höhe m</label><input id="o-h" inputmode="decimal" value="1,40">
   <label for="o-brh">Brüstung m</label><input id="o-brh" inputmode="decimal" value="0,90">
 </div>
-<div class="float zoom" id="zoombox"><button id="z-in" aria-label="Vergrößern" title="Vergrößern"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="z-out" aria-label="Verkleinern" title="Verkleinern"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button id="z-fit" aria-label="Ganzen Grundriss zeigen" title="Ganzen Grundriss zeigen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
+<div class="float zoom" id="zoombox"><button id="z-in" aria-label="Vergrößern" title="Vergrößern"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="z-out" aria-label="Verkleinern" title="Verkleinern"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button id="z-fit" aria-label="Ganzen Grundriss zeigen" title="Ganzen Grundriss zeigen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
 <div class="hint" id="hint"></div>
 <p class="float note msg" id="saveinfo" role="status"></p>
 <aside class="float panel" id="panel">
   <div class="tabs" role="tablist" aria-label="Seitenleiste">
     <button role="tab" data-tab="auswahl" aria-selected="true">Auswahl</button><button role="tab" data-tab="raeume" aria-selected="false">Räume</button><button role="tab" data-tab="pruefung" aria-selected="false" id="tab-pruef">Prüfung</button><button role="tab" data-tab="dach" aria-selected="false">Dach</button><button role="tab" data-tab="datei" aria-selected="false">Datei</button>
   </div>
-  <section class="pane" data-pane="auswahl" id="props"><h2>Auswahl</h2><p class="lead">Wand, Öffnung oder Raum antippen.</p></section>
+  <section class="pane" data-pane="auswahl" id="props"><h2>Auswahl</h2><p class="lead">Wand, Öffnung oder Raum anklicken. Punkte lassen sich ziehen, Entf löscht, Strg+Z macht rückgängig.</p></section>
   <section class="pane" data-pane="raeume" hidden><h2>Räume</h2><div id="rooms"></div></section>
   <section class="pane" data-pane="pruefung" id="pruefcard" hidden><h2 id="pruef-h">Prüfung</h2><div id="pruef"></div></section>
   <section class="pane" data-pane="dach" id="dachcard" hidden><h2>Dach</h2>
@@ -528,7 +528,7 @@ function renderRooms() {
 function renderProps() {
   const f = fl(), el = $('props'), sel = st.sel; if (!f) return;
   const head = t => `<h2>${t}</h2>`;
-  if (!sel) { el.innerHTML = head('Auswahl') + `<p class="small">${st.tool === 'wall' ? 'Punkte antippen oder Länge eingeben und Richtung wählen. Antippen des Anfangspunkts schließt die Kontur.' : st.tool === 'open' ? 'Eine Wand antippen, um dort eine Öffnung zu setzen.' : 'Wand, Öffnung oder Raum antippen. Knoten lassen sich ziehen.'}</p>`; return; }
+  if (!sel) { el.innerHTML = head('Auswahl') + `<p class="small">${st.tool === 'wall' ? 'Punkte klicken oder Länge eingeben und Richtung wählen. Ein Klick auf den Anfangspunkt schließt die Kontur, Esc beendet die Wand.' : st.tool === 'open' ? 'Eine Wand anklicken, um dort eine Öffnung zu setzen.' : 'Wand, Öffnung oder Raum anklicken. Punkte lassen sich ziehen, Entf löscht, Strg+Z macht rückgängig.'}</p>`; return; }
   const g = f.g, N = new Map(g.knoten.map(n => [n.id, n]));
   if (sel.kind === 'wall') { const w = g.waende.find(x => x.id === sel.id); if (!w) { st.sel = null; return renderProps(); } const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), ts = w.ts == null ? w.t / 2 : w.ts, lage = Math.abs(ts - w.t / 2) < 1 ? 'Wandmitte' : 'Wandkante';
     el.innerHTML = head(w.ext ? 'Außenwand' : 'Innenwand') + `<div class="grid2"><label class="f">Achslänge m<input value="${nf(L / 1000, 3)}" disabled></label><label class="f">Dicke cm<input id="p-t" inputmode="decimal" value="${nf(w.t / 10, 1)}"></label>
@@ -552,7 +552,7 @@ function renderProps() {
     $('p-n').onchange = e => upd({ name: e.target.value.trim() || r.name }); $('p-u').onchange = e => upd({ nutzung: e.target.value.trim() }); $('p-temp').onchange = e => upd({ temp: num(e.target.value) }); }
 }
 function updButtons() { $('undo').disabled = !st.undo.length; $('redo').disabled = !st.redo.length; }
-function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht das Modell, Mausrad oder zwei Finger zoomen' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt antippen oder Länge und Richtung eingeben, Esc beendet die Wand' : 'Ersten Punkt der Wand antippen') : st.tool === 'open' ? 'Wand antippen, um Fenster oder Tür zu setzen' : 'Leere Fläche ziehen verschiebt den Plan, Mausrad oder zwei Finger zoomen'; }
+function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht das Modell, Mausrad zoomt. Tasten: 1 2 3 Ansicht, F Gesamtansicht' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt klicken oder Länge eingeben und Richtung wählen, Esc beendet die Wand' : 'Ersten Punkt der Wand klicken') : st.tool === 'open' ? 'Wand anklicken, um Fenster oder Tür zu setzen' : 'Ziehen verschiebt den Plan, Mausrad zoomt. Tasten: V Auswahl, W Wand, O Öffnung, 1 2 3 Ansicht, Bild↑ Bild↓ Geschoss'; }
 /* Seitenleiste: Register, ein-/ausblenden; neue Auswahl im Plan öffnet das Register „Auswahl“ */
 function setTab(t) { st.tab = t; document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t; }); if (t === 'datei') renderNacharbeit(); if (t === 'dach') renderDachfenster(); }
 function selKey(x) { return x ? x.kind + ':' + (x.id || (x.mitte || []).join(',')) : ''; }
@@ -681,6 +681,11 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); undoRedo(st.undo, st.redo); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !inField) { e.preventDefault(); undoRedo(st.redo, st.undo); return; }
   if (e.key === 'Escape') { if (st.chain) endChain(false); else { st.sel = null; refresh(); } return; }
+  // Tastenkürzel für die Arbeit am PC: V Auswahl, W Wand, O Öffnung, 1/2/3 Ansicht, F ganzer Plan, Bild↑/↓ Geschoss, S Seitenleiste
+  if (!inField && !e.ctrlKey && !e.metaKey && !e.altKey) { const k = e.key.toLowerCase(), fi = st.floors.findIndex(x => x.id === st.fid);
+    const act = { v: () => setTool('sel'), w: () => setTool('wall'), o: () => setTool('open'), 1: () => setView('2d'), 2: () => setView('3d'), 3: () => setView('haus'), f: () => (st.view === '2d' ? refresh(true) : draw3d()), s: () => $('panel-t').click(),
+      pageup: () => fi < st.floors.length - 1 && selectFloor(st.floors[fi + 1].id), pagedown: () => fi > 0 && selectFloor(st.floors[fi - 1].id) }[k];
+    if (act) { e.preventDefault(); act(); return; } }
   if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && st.sel) { const s = st.sel; st.sel = null; if (s.kind === 'wall') change(g => GM.edit.deleteWall(g, s.id)); else if (s.kind === 'open') change(g => GM.edit.deleteOpening(g, s.id)); else refresh(); }
 });
 new ResizeObserver(() => { if (st.view === '2d') draw2d(); else frame(); }).observe($('fig'));

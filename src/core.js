@@ -333,9 +333,14 @@
     const hz = hoehen(p), mm = v => (v == null ? null : Math.round(v * 1000)), f0 = p.geschosse[0] || {};
     return { id: p.id, projektName: p.name || '', version, quelle: 'Gebäudemodell', geaendert: Date.now(), bodenplatte_mm: f0.bodenD > 0 ? Math.round(f0.bodenD * 10) : null, dach: dachP || null,
       geschosse: floors.map(f => { const rs = roomsWithMeta(f.g, f.meta), bf = p.geschosse.find(x => x.id === f.id) || {}, h = hz.find(x => x.id === f.id);
-        return { id: f.id, name: f.name, lageFrei: bf.lageFrei || null, baGeo: geoKey(bf), geschossHoehe_mm: h ? mm(h.Ge) : f.h, lichteHoehe_mm: h ? mm(h.lh) : bf.hoehe ? mm(bf.hoehe) : null, niveau_mm: h ? mm(h.niv) : null, rohdecke_mm: h ? mm(h.rde) : null, fussboden_mm: h ? mm(h.fb) : null, abhaengung_mm: h ? mm(h.abh) : null,
-          knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen,
-          raeume: rs.map(r => { const q = (bf.raeume || []).find(x => x.id === r.bestandsaufnahmeId); return { ...metaOf(r, f.meta), hoehe_mm: q && q.hoehe > 0 ? mm(q.hoehe) : null, flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur }; }) }; }) };
+        const raeume = rs.map(r => { const q = (bf.raeume || []).find(x => x.id === r.bestandsaufnahmeId); return { ...metaOf(r, f.meta), hoehe_mm: q && q.hoehe > 0 ? mm(q.hoehe) : null, flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur }; });
+        /* Decke als eine Platte über allen Räumen: haben alle Räume dieselbe Höhe, liegt die Rohdecke direkt darauf
+           (lichte Höhe = Raumhöhe, Rohdecke = Geschosshöhe − Fußboden − lichte Höhe − Abhängung, wie im Raumtool 3D) */
+        let lh = h ? mm(h.lh) : bf.hoehe ? mm(bf.hoehe) : null, rd = h ? mm(h.rde) : null, quelle = 'geschoss';
+        const hs = raeume.map(r => r.hoehe_mm || lh).filter(v => v > 0);
+        if (h && hs.length && hs.every(v => Math.abs(v - hs[0]) <= 5) && Math.abs(hs[0] - lh) > 5) { lh = hs[0]; rd = mm(h.Ge) - mm(h.fb) - lh - mm(h.abh); quelle = 'raeume'; }
+        return { id: f.id, name: f.name, lageFrei: bf.lageFrei || null, baGeo: geoKey(bf), geschossHoehe_mm: h ? mm(h.Ge) : f.h, lichteHoehe_mm: lh, lichteQuelle: quelle, niveau_mm: h ? mm(h.niv) : null, rohdecke_mm: rd, fussboden_mm: h ? mm(h.fb) : null, abhaengung_mm: h ? mm(h.abh) : null,
+          knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen, raeume }; }) };
   }
 
   /* ---- Dach (v1): rechteckiger Grundriss = Außenumriss des obersten Geschosses (nach dem Übereinanderstellen) ----

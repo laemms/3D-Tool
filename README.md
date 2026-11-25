@@ -52,6 +52,12 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Raumzonen (IfcZone) nach Beheizung: „Unbeheizt“, „Beheizt 20 °C“ … Raumtool 3D übernimmt sie als Raum-Zone.
   Die Konditionierung (beheizt/unbeheizt) übernimmt Raumtool aus der IFC nicht (getestet: Zone, ObjectType,
   Pset_SpaceThermalRequirements); U-Werte setzt Chris in der Heizlast (H73), deshalb keine U-Werte im IFC.
+- Decke als eine Platte (Wunsch 25.11.2026): je Geschoss genau eine Rohdecke über dem ganzen Grundriss. Haben alle Räume dieselbe Höhe
+  (Raumhöhe aus der Bestandsaufnahme), ist das die lichte Höhe, die Rohdecke liegt direkt darauf: Rohdecke = Geschosshöhe − Fußboden −
+  lichte Höhe − Abhängung (Formel wie Raumtool 3D und Bestandsaufnahme). Unterschiedliche Raumhöhen: Geschosswerte, Prüfung meldet es;
+  Rohdecke unter 10 cm: Warnung. Unterkante der Platte = OKFF + lichte Höhe + Abhängung.
+- Desktop first: Arbeit überwiegend am PC. Tastenkürzel V/W/O (Werkzeuge), 1/2/3 (Ansicht), F (ganzer Plan), Bild↑/↓ (Geschoss),
+  S (Seitenleiste), Entf, Strg+Z/Y; Texte für Maus. Tablet bleibt nutzbar, wird aber nachrangig behandelt.
 - Nacharbeit in Raumtool (`GMIFC.nacharbeit`, `nacharbeitText`): Rohdecke je Geschoss, unbeheizte/abweichend temperierte Räume,
   Hinweis zur Raumtool-Konstruktionsdicke beim ausgebauten Dach, Dachfenster mit Maß, Unterkante und Dachfläche (Himmelsrichtung über
   `GM.dachFlaechenListe`, Stücke einer Ebene zusammengefasst), Warnungen der Prüfung. Im Register Datei sichtbar, beim Export als

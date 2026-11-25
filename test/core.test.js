@@ -168,6 +168,12 @@ t('Dach auf L-, T- und U-Grundriss: Teile, Kehlen, keine Überlappung', () => {
   const doc = { geschosse: [{ id: 'eg', name: 'EG', ...haus(formen.L), niveau_mm: 0, geschossHoehe_mm: 2800 }] };
   assert.strictEqual(GM.dach(doc, { form: 'sattel', neigung: 40, teileModus: 'rechteck', dicke: 300 }).teile.length, 1);
 });
+t('Decke als eine Platte: gleiche Raumhöhen bestimmen lichte Höhe und Rohdecke', () => {
+  const p = JSON.parse(JSON.stringify(require('../fixtures/beispiel.json'))), eg = p.geschosse.find(f => f.name === 'EG'); eg.raeume.forEach(r => { r.hoehe = 2.6; });
+  const d = GM.modelDoc(p, GM.floorsFromBA(p), 4, null), g = d.geschosse.find(f => f.name === 'EG');
+  assert.strictEqual(g.lichteHoehe_mm, 2600); assert.strictEqual(g.lichteQuelle, 'raeume'); assert.strictEqual(g.rohdecke_mm, g.geschossHoehe_mm - (g.fussboden_mm || 0) - 2600 - (g.abhaengung_mm || 0));
+  eg.raeume[0].hoehe = 2.4; const g2 = GM.modelDoc(p, GM.floorsFromBA(p), 4, null).geschosse.find(f => f.name === 'EG'); assert.strictEqual(g2.lichteQuelle, 'geschoss', 'verschiedene Raumhöhen: Geschosswerte');
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----
