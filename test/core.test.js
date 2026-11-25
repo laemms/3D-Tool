@@ -78,6 +78,17 @@ console.log(ok + ' Tests bestanden');
     const r2 = GM.roomsWithMeta(g2, r1); assert.ok(r2.some(r => r.name === 'Wohnen'));
   });
 }
+
+// ---- Raumtrennung ohne Wand (Räume liegen direkt aneinander) ----
+{
+  const R = (id, x, y, w, h) => ({ id, name: id, x, y, beheizt: 'ja', temp: 20, segs: [0, 90, 180, 270].map((d, i) => ({ dir: d, len: i % 2 ? h : w, grenzt: 'aussen', nachbarId: '', oeffnungen: [] })) });
+  const eg = { id: 'eg', name: 'EG', raeume: [R('Essen', 0, 0, 3.5, 3.4), R('Wohnen', 0, 3.4, 6.6, 3.9), R('Flur', 3.74, 0, 2.86, 3.16)] };
+  const res = GM.fromBestandsaufnahme({ bauteile: [], geschosse: [eg] }, eg);
+  t('Offener Übergang: Räume getrennt, ohne Wand, Flächen gleich', () => {
+    for (const q of res.quellraeume) { const m = res.raeume.find(r => r.bestandsaufnahme && r.bestandsaufnahme.id === q.id); assert.ok(m && Math.abs(m.flaeche_m2 - q.flaeche_m2) < 0.02, q.name + ' ' + (m && m.flaeche_m2) + ' statt ' + q.flaeche_m2); }
+    assert.strictEqual(res.raeume.length, 3);
+  });
+}
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----

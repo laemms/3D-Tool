@@ -144,7 +144,8 @@
       const pieces = [];
       o.r.segs.forEach((s, i) => {
         const S = outN(o, i), parts = PARTS.get(o.r.id + ':' + i), sv = [-S.dir[1], S.dir[0]], roomOnS = dot(sv, S.n) < 0;
-        for (const pt of parts) { if (pt.t <= 0.001) continue; const ax = axOf(o, i, pt); pt.ax = ax; const a = [S.a[0] + S.dir[0] * pt.von + S.n[0] * ax, S.a[1] + S.dir[1] * pt.von + S.n[1] * ax], b = [S.a[0] + S.dir[0] * pt.bis + S.n[0] * ax, S.a[1] + S.dir[1] * pt.bis + S.n[1] * ax]; pieces.push({ a, b, d: S.dir, t: pt.t, ts: roomOnS ? ax : pt.t - ax, ax, ext: pt.ext, src: o.r.id + ':' + i }); }
+        // Raumtrennung ohne Wand (Räume liegen direkt aneinander, z. B. offener Übergang): Hilfskante auf der Raumseite
+        for (const pt0 of parts) { const pt = pt0.t <= 0.001 ? Object.assign(pt0, { t: HILF / 1000, offen: true }) : pt0; const ax = pt.offen ? 0 : axOf(o, i, pt); pt.ax = ax; const a = [S.a[0] + S.dir[0] * pt.von + S.n[0] * ax, S.a[1] + S.dir[1] * pt.von + S.n[1] * ax], b = [S.a[0] + S.dir[0] * pt.bis + S.n[0] * ax, S.a[1] + S.dir[1] * pt.bis + S.n[1] * ax]; pieces.push({ a, b, d: S.dir, t: pt.t, ts: roomOnS ? ax : pt.t - ax, ax, ext: pt.ext, src: o.r.id + ':' + i }); }
         // Öffnungen: Lage auf der Raumseite → Punkt auf der Wandachse
         const list = []; for (const op of s.oeffnungen || []) { const k = Math.max(1, Math.round(op.anz || 1)); for (let j = 0; j < k; j++) list.push(op); }
         // automatisch platzierte Öffnungen: in den längsten passenden Abschnitt (Innentür → Abschnitt mit Nachbar, sonst Außenabschnitt)
@@ -219,10 +220,11 @@
 
 
   /* Stoßstellen: über Hilfskanten verbundene Knoten bilden eine gemeinsame Stoßstelle (Achsversatz) */
-  function junctions(g) {
+  function junctions(g, links) {
     const par = new Map(g.knoten.map(n => [n.id, n.id])), find = x => { while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
-    g.waende.filter(isHilf).forEach(w => { const a = find(w.a), b = find(w.b); if (a !== b) par.set(a, b); });
-    const J = new Map(); g.waende.filter(w => !isHilf(w)).forEach(w => { for (const id of [w.a, w.b]) { const r = find(id); if (!J.has(r)) J.set(r, []); J.get(r).push({ w, at: id }); } });
+    const isLink = w => isHilf(w) || (links && links.has(w.id)); // Hilfskanten und ganz verdeckte Wandstücke verbinden Knoten
+    g.waende.filter(isLink).forEach(w => { const a = find(w.a), b = find(w.b); if (a !== b) par.set(a, b); });
+    const J = new Map(); g.waende.filter(w => !isLink(w)).forEach(w => { for (const id of [w.a, w.b]) { const r = find(id); if (!J.has(r)) J.set(r, []); J.get(r).push({ w, at: id }); } });
     return [...J.values()];
   }
 

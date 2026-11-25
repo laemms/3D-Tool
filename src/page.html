@@ -115,7 +115,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nf = (v, d = 2) => v == null || isNaN(v) ? '–' : Number(v).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
 const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isNaN(v) ? null : v; };
-const MODEL_VERSION = 3; // 2: Hilfskanten; 3: Querwand-Lücken wie in der Bestandsaufnahme
+const MODEL_VERSION = 4; // 2: Hilfskanten; 3: Querwand-Lücken; 4: Raumtrennung ohne Wand
 window.__gm = null;
 const st = { db: null, projects: {}, models: {}, pid: null, fid: null, floors: [], tool: 'sel', view: '2d', sel: null, chain: null, hover: null, drag: null, pan: null, vw: null, undo: [], redo: [], dirty: false, saveTimer: null, t3: null, lastDir: 0 };
 

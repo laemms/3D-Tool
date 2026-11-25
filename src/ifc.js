@@ -20,7 +20,6 @@
   /* Verlängerung (+) bzw. Kürzung (−) jedes Wandendes in mm */
   function wallEnds(g) {
     const N = new Map(g.knoten.map(n => [n.id, n])), ext = new Map();
-    g.waende.forEach(w => ext.set(w.id, { a: 0, b: 0 }));
     const P = id => { const n = N.get(id); return [n.x, n.y]; };
     const dirFrom = (w, id) => { const n = N.get(id), o = N.get(w.a === id ? w.b : w.a), d = [o.x - n.x, o.y - n.y], L = Math.hypot(d[0], d[1]) || 1; return [d[0] / L, d[1] / L]; };
     // Eckpunkte des Wandkörpers am eigenen Knoten, absolut
@@ -30,7 +29,7 @@
     const set = (j, v) => { ext.get(j.w.id)[j.w.a === j.at ? 'a' : 'b'] = v; };
     const col = (p, q) => { const a = dirFrom(p.w, p.at), b = dirFrom(q.w, q.at); return a[0] * b[0] + a[1] * b[1] < -0.999; };
     const len_ = j => Math.hypot(...['x', 'y'].map(k => N.get(j.w.a)[k] - N.get(j.w.b)[k]));
-    for (const js of GM.junctions(g)) {
+    const run = links => { g.waende.forEach(w => ext.set(w.id, { a: 0, b: 0 })); for (const js of GM.junctions(g, links)) {
       if (js.length < 2) continue;
       if (js.length === 2) {
         const [p, q] = js; if (col(p, q)) continue;
@@ -42,10 +41,16 @@
       // Kreuzungen) enden an dessen naher Fläche
       const pairs = []; js.forEach((p, i) => js.forEach((q, k) => { if (k > i && col(p, q)) pairs.push([p, q]); }));
       if (!pairs.length) continue;
-      const score = pr => Math.max(pr[0].w.t, pr[1].w.t) * 1e6 + len_(pr[0]) + len_(pr[1]);
+      // seitlicher Versatz zweier Achsen (bei Hilfskanten-Stößen) – ein Paar ohne Versatz geht vor
+      const offs = pr => { const a = P(pr[0].at), u = dirFrom(pr[0].w, pr[0].at), b = P(pr[1].at); return Math.abs((b[0] - a[0]) * -u[1] + (b[1] - a[1]) * u[0]); };
+      const score = pr => Math.max(pr[0].w.t, pr[1].w.t) * 1e6 - offs(pr) * 1e3 + len_(pr[0]) + len_(pr[1]);
       const mainPair = pairs.reduce((a, b) => (score(b) > score(a) ? b : a)), main = mainPair[0].w.t >= mainPair[1].w.t ? mainPair[0] : mainPair[1];
       js.filter(j => !mainPair.includes(j)).forEach(j => set(j, Math.min(0, ...proj(j, main))));
-    }
+    } };
+    // Wandstücke, die nach dem Kürzen keine Länge behalten, liegen ganz in anderen Wänden: als Verbindung behandeln und neu rechnen
+    const links = new Set();
+    for (let k = 0; k < 4; k++) { run(links); const more = g.waende.filter(w => !GM.isHilf(w) && !links.has(w.id) && len_({ w }) + ext.get(w.id).a + ext.get(w.id).b < -5); if (!more.length) break; more.forEach(w => links.add(w.id)); }
+    ext.links = links;
     return ext;
   }
 
@@ -87,7 +92,7 @@
         const a = N.get(w.a), b = N.get(w.b); if (!a || !b || GM.isHilf(w)) continue; // Hilfskanten haben keinen Wandkörper
         const ea = ends.get(w.id).a, eb = ends.get(w.id).b, A = W([a.x, a.y]), Bp = W([b.x, b.y]), dx = Bp[0] - A[0], dy = Bp[1] - A[1], Lm = Math.hypot(dx, dy); if (Lm < 0.01) continue;
         const ux = dx / Lm, uy = dy / Lm, ts = (w.ts == null ? w.t / 2 : w.ts), x0 = -ea / 1000, x1 = Lm + eb / 1000;
-        if (x1 - x0 < 0.005) continue; // kurzes Stück zwischen zwei Stößen liegt ganz in den durchlaufenden Wänden
+        if (x1 - x0 < 0.005 || ends.links.has(w.id)) continue; // kurzes Stück zwischen zwei Stößen liegt ganz in den durchlaufenden Wänden
         // im Bildschirm liegt die S-Seite rechts der Laufrichtung; nach dem Spiegeln von y ist das lokal −Y
         const yS = -ts / 1000, yO = (w.t - ts) / 1000, lp = LP(lpS, A[0], A[1], 0, ux, uy);
         const axis = E(`IFCSHAPEREPRESENTATION(${ctx},'Axis','Curve2D',(${E(`IFCPOLYLINE((${P2(0, 0)},${P2(Lm, 0)}))`)}))`);
