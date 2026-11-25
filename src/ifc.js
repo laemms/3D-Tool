@@ -63,7 +63,7 @@
     const pid = model.id || 'projekt', G = k => guid(pid + '|' + k);
     const P2 = (x, y) => E(`IFCCARTESIANPOINT((${R(x)},${R(y)}))`), P3 = (x, y, z) => E(`IFCCARTESIANPOINT((${R(x)},${R(y)},${R(z)}))`), D3 = (x, y, z) => E(`IFCDIRECTION((${R(x)},${R(y)},${R(z)}))`);
     const org = E(`IFCORGANIZATION($,${S(opts.organisation || 'cL-energiePlan')},$,$,$)`), per = E(`IFCPERSON($,${S(opts.bearbeiter || '')},$,$,$,$,$,$)`), po = E(`IFCPERSONANDORGANIZATION(${per},${org},$)`);
-    const app = E(`IFCAPPLICATION(${org},'A','Gebaeudemodell','GM')`), oh = E(`IFCOWNERHISTORY(${po},${app},$,.ADDED.,$,$,$,${Math.floor((opts.zeit || Date.now()) / 1000)})`);
+    const app = E(`IFCAPPLICATION(${org},'__BUILD__','Gebaeudemodell','GM')`), oh = E(`IFCOWNERHISTORY(${po},${app},$,.ADDED.,$,$,$,${Math.floor((opts.zeit || Date.now()) / 1000)})`);
     const un = E(`IFCUNITASSIGNMENT((${[['LENGTHUNIT', 'METRE'], ['AREAUNIT', 'SQUARE_METRE'], ['VOLUMEUNIT', 'CUBIC_METRE'], ['PLANEANGLEUNIT', 'RADIAN'], ['THERMODYNAMICTEMPERATUREUNIT', 'DEGREE_CELSIUS']].map(u => E(`IFCSIUNIT(*,.${u[0]}.,$,.${u[1]}.)`)).join(',')}))`);
     const zd = D3(0, 0, 1), xd = D3(1, 0, 0), na = (Number(opts.nord) || 0) * Math.PI / 180;
     const ctx = E(`IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,${E(`IFCAXIS2PLACEMENT3D(${P3(0, 0, 0)},${zd},${xd})`)},${E(`IFCDIRECTION((${R(Math.sin(na))},${R(Math.cos(na))}))`)})`);
