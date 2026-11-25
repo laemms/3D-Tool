@@ -7,123 +7,224 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* VOICE: Werkzeug für den Energieberater, ruhig und präzise, wie das Bestandsaufnahme-Tool
-   IDEA: ein Planblatt – Grundriss mit Wandstärken, rechts die Eigenschaften der Auswahl
-   PICTURE: der Grundriss bzw. das 3D-Modell selbst, groß, oben
-   COLOUR and TYPE: Farben und Schrift des Bestandsaufnahme-Tools (Grün #0b8a5f, Plus Jakarta Sans)
-   LAYOUT: Werkzeugleiste, Plan links breit, Eigenschaften und Räume rechts; unter 900px untereinander */
-:root{color-scheme:light dark;--bg:light-dark(#f1f4f2,#090d0b);--card:light-dark(#fff,#111814);--ink:light-dark(#0e1512,#ecf2ee);--mute:light-dark(#5b6b63,#9fb0a7);--line:light-dark(rgba(14,21,18,.10),rgba(255,255,255,.09));--line2:light-dark(rgba(14,21,18,.18),rgba(255,255,255,.18));--accent:light-dark(#0b8a5f,#2fd49a);--soft:light-dark(#dcf4e8,#11302a);--wall:light-dark(#26332d,#c9d6cf);--wallin:light-dark(#7d8c85,#7b8d84);--room:light-dark(#e9f6ef,#14231c);--bad:light-dark(#c0281f,#ff8a80);--warn:light-dark(#9a6200,#f5c46a);--win:light-dark(#2f7fc1,#86c0f0);--door:light-dark(#8a5a2b,#dba86e);--sel:light-dark(#e07a00,#ffb44d);--w3e:light-dark(#c3cec8,#5d6d65);--w3i:light-dark(#e2e9e5,#43514a)}
+/* Gebäudemodell – minimalistisches Planungswerkzeug
+   IDEE: Planblatt. Der Grundriss füllt den ganzen Bildschirm (graues Blatt mit 1-m-Punktraster, Räume weiß, Wände als
+   dunkle Poché), alle Bedienelemente schweben ruhig darüber: oben Projekt, Geschoss, Ansicht und Export, links die
+   Werkzeuge, rechts eine Seitenleiste mit Registern. Einzige Akzentfarbe ist das Grün der Marke (#0b8a5f).
+   SCHRIFT: Plus Jakarta Sans wie im Bestandsaufnahme-Tool, Zahlen tabellarisch. */
+:root{color-scheme:light dark;
+  --paper:light-dark(#eef1ef,#0b100e);--surface:light-dark(#ffffff,#141b18);--ink:light-dark(#18211d,#e8efeb);--mute:light-dark(#66736d,#93a39b);
+  --line:light-dark(#e2e7e4,#232d29);--line2:light-dark(#cdd5d1,#33403a);--accent:light-dark(#0b8a5f,#34d39b);--soft:light-dark(#e2f3ea,#10302a);
+  --wall:light-dark(#1f2a25,#d5e0da);--wallin:light-dark(#8d9993,#6f8079);--room:light-dark(#ffffff,#121a16);--dot:light-dark(#cbd3cf,#26302c);--axis:light-dark(#b9c3be,#3a4842);
+  --bad:light-dark(#c0281f,#ff8a80);--warn:light-dark(#a35f00,#f5c46a);--win:light-dark(#2b78c2,#86c0f0);--door:light-dark(#9c6230,#dba86e);--sel:var(--accent);
+  --roof:light-dark(#5f6b66,#7d8a84);--w3e:light-dark(#c3cec8,#5d6d65);--w3i:light-dark(#e2e9e5,#43514a);
+  --lift:0 1px 2px rgba(16,24,20,.06),0 10px 28px rgba(16,24,20,.10);--r:14px}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
 [hidden]{display:none!important}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:clip}
-header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px max(3vw,16px);border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
-header h1{font-size:20px;margin:0;font-weight:700}
-header a{color:var(--accent);text-decoration:none;font-weight:600}
-.sync{margin-inline-start:auto;font-size:13px;color:var(--mute)}.sync.ok{color:var(--accent)}.sync.warn{color:var(--warn)}
-main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;padding:16px max(3vw,16px);max-width:1440px;margin:0 auto}
-@media(max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
-.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.bar+.bar{margin-top:8px}
-.sep{width:1px;align-self:stretch;background:var(--line2);margin:0 4px}
-select,button,input{font:inherit;font-size:15px;min-height:44px;border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);padding:0 11px}
-input{width:6.5em;font-size:16px;font-variant-numeric:tabular-nums}
-input.wide{width:100%}
-button{cursor:pointer;font-weight:600;white-space:nowrap}button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border-color:transparent}
-button[aria-pressed=true]{background:var(--soft);border-color:var(--accent);color:var(--accent)}
-button.danger{color:var(--bad)}
-button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-button:disabled{opacity:.45;cursor:default}
-label.f{display:grid;gap:2px;font-size:13px;color:var(--mute)}label.f>*{color:var(--ink)}
-.fig{position:relative;height:clamp(360px,64vh,760px);border-radius:10px;background:var(--bg);overflow:hidden;touch-action:none;margin-top:10px;user-select:none}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.45 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+select,button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Arbeitsfläche */
+.fig{position:fixed;inset:0;overflow:hidden;touch-action:none;user-select:none}
 .fig>svg,.fig>canvas{position:absolute;inset:0;width:100%;height:100%}
 .fig svg{cursor:crosshair}.fig svg.sel{cursor:default}
-.hint{position:absolute;left:10px;bottom:10px;right:10px;font-size:13px;color:var(--mute);pointer-events:none}
-.zoom{position:absolute;right:10px;top:64px;display:grid;gap:6px;z-index:2}
-.views{position:absolute;right:10px;top:10px;z-index:2}
-.opts{position:absolute;left:10px;top:10px;right:120px;z-index:2;background:color-mix(in srgb,var(--card) 88%,transparent);border:1px solid var(--line);border-radius:12px;padding:6px}
-.opts input{width:5.5em}
-.zoom button{min-width:44px;padding:0}
-h2{font-size:17px;margin:0 0 8px}
+
+/* schwebende Flächen */
+.float{position:fixed;z-index:3;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--lift)}
+
+/* Kopfleiste */
+.top{top:12px;left:12px;right:12px;height:56px;display:flex;align-items:center;gap:10px;padding:0 8px 0 6px}
+.back{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;color:var(--mute)}.back:hover{background:var(--paper);color:var(--ink)}
+.title{border:0;background:none;font-size:17px;font-weight:700;letter-spacing:-.01em;padding:6px 26px 6px 6px;border-radius:10px;max-width:34ch;appearance:none;-webkit-appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--mute) 50%),linear-gradient(135deg,var(--mute) 50%,transparent 50%);background-position:calc(100% - 13px) 55%,calc(100% - 8px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.title:hover{background-color:var(--paper)}
+.sync{font-size:12.5px;color:var(--mute);white-space:nowrap}.sync.ok{color:var(--mute)}.sync.warn{color:var(--warn)}
+.sync::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--line2);margin-right:6px;vertical-align:1px}.sync.ok::before{background:var(--accent)}.sync.warn::before{background:var(--warn)}
+.grow{flex:1}.sm{display:none}
+.seg{display:inline-flex;gap:2px;padding:3px;background:var(--paper);border-radius:11px}
+.seg button{border:0;background:none;min-height:34px;padding:0 12px;border-radius:8px;font-weight:600;font-size:14px;color:var(--mute);white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(16,24,20,.12)}
+.btn,.pri{min-height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);background:var(--surface);font-weight:600;font-size:14px;white-space:nowrap}
+.pri{background:var(--accent);border-color:transparent;color:light-dark(#fff,#04140d)}
+.pri:hover{filter:brightness(1.06)}.btn:hover{border-color:var(--mute)}
+.icon{display:grid;place-items:center;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--mute)}.icon:hover{background:var(--paper);color:var(--ink)}
+.icon[aria-pressed=true]{color:var(--ink)}
+button:disabled{opacity:.35;cursor:default}
+
+/* Werkzeugleiste links */
+.rail{left:12px;top:80px;display:flex;flex-direction:column;gap:2px;padding:6px;width:68px}
+.rail button{display:grid;justify-items:center;gap:2px;border:0;background:none;border-radius:10px;padding:8px 2px 6px;color:var(--mute);font-size:11px;font-weight:600}
+.rail button:hover{color:var(--ink);background:var(--paper)}
+.rail button[aria-pressed=true]{color:var(--accent);background:var(--soft)}
+.rail hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+.rail svg,.icon svg,.zoom svg,.back svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* Werkzeugoptionen oben in der Mitte */
+.opts{top:80px;left:92px;right:calc(var(--pw) + 24px);display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;width:max-content;max-width:calc(100vw - var(--pw) - 116px)}
+.opts select,.opts input,.opts button{min-height:36px;border-radius:9px;border:1px solid var(--line2);background:var(--surface);padding:0 9px;font-size:14px}
+.opts input{width:5.2em;font-variant-numeric:tabular-nums}
+.opts button{font-weight:600}.opts button[aria-pressed=true]{background:var(--soft);border-color:var(--accent);color:var(--accent)}
+.opts label{font-size:12.5px;color:var(--mute)}
+.sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+
+/* Zoom und Hinweis */
+.zoom{left:12px;bottom:12px;display:flex;gap:2px;padding:4px}
+.zoom button{display:grid;place-items:center;width:38px;height:38px;border:0;background:none;border-radius:9px;color:var(--mute)}.zoom button:hover{background:var(--paper);color:var(--ink)}
+.hint{position:fixed;z-index:2;bottom:20px;left:50%;transform:translateX(calc(-50% - var(--pw) / 2));font-size:12.5px;color:var(--mute);pointer-events:none;white-space:nowrap;max-width:calc(100vw - var(--pw) - 220px);overflow:hidden;text-overflow:ellipsis}
+.note{position:fixed;z-index:4;bottom:48px;left:50%;transform:translateX(calc(-50% - var(--pw) / 2));padding:10px 14px;font-size:14px;max-width:min(560px,calc(100vw - var(--pw) - 120px))}
+.note:empty{display:none}
+.note button{margin-left:8px}
+
+/* Seitenleiste */
+:root{--pw:372px}
+body.nopanel{--pw:0px}
+.panel{top:80px;right:12px;bottom:12px;width:360px;display:flex;flex-direction:column;overflow:hidden}
+body.nopanel .panel{display:none}
+.tabs{display:flex;gap:2px;padding:6px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs button{border:0;background:none;min-height:34px;padding:0 10px;border-radius:8px;font-weight:600;font-size:13.5px;color:var(--mute);white-space:nowrap;position:relative}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected=true]{color:var(--ink);background:var(--paper)}
+.tabs .badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:5px;border-radius:9px;background:var(--warn);color:#fff;font-size:11px;font-weight:700;vertical-align:1px}
+.pane{padding:14px 16px 18px;overflow:auto;flex:1}
+.pane h2{font-size:17px;font-weight:700;letter-spacing:-.01em;margin:0 0 10px}
+.pane .lead{color:var(--mute);font-size:14px;margin:0 0 12px}
+.pane select,.pane input,.pane button{min-height:40px;border-radius:10px;border:1px solid var(--line2);background:var(--surface);padding:0 10px;font-size:14.5px}
+.pane input{font-variant-numeric:tabular-nums}
+.pane button{font-weight:600}.pane button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border-color:transparent}
+.pane button.danger{color:var(--bad)}
+label.f{display:grid;gap:4px;font-size:12.5px;color:var(--mute)}label.f>*{color:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid2 input,.grid2 select{width:100%}
+.gridlab{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}.gridlab label{font-size:12.5px;color:var(--mute);margin-top:8px;grid-row:span 1}.gridlab input,.gridlab select{width:100%}
+/* Dach: Paare aus Beschriftung und Feld; lange Auswahlfelder über die ganze Breite */
+.gridlab{grid-auto-flow:row dense}.gridlab>label{grid-column:span 2;margin-bottom:-2px}.gridlab>select,.gridlab>input{grid-column:span 2}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input.wide{width:100%}
 table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:500}
+th,td{text-align:left;padding:8px 4px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:500;font-size:12.5px}
 td.r,th.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 tr.on td{background:var(--soft)}
+tr:last-child td{border-bottom:0;font-weight:700}
 .ok{color:var(--accent)}.no{color:var(--bad)}.warn{color:var(--warn)}
 .small{font-size:13px;color:var(--mute)}
-.side{display:grid;gap:16px;align-content:start}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.grid2 input,.grid2 select{width:100%}
-.msg{margin:8px 0 0;font-size:14px}
-dialog{border:1px solid var(--line2);border-radius:14px;background:var(--card);color:var(--ink);max-width:420px}
-dialog::backdrop{background:rgba(0,0,0,.35)}
-.gridlab{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}.gridlab input,.gridlab select{width:100%;min-width:0}.pr span{flex:1;min-width:0;white-space:normal}
-.pr{display:flex;gap:8px;align-items:flex-start;width:100%;text-align:left;border:0;background:none;padding:6px 4px;border-radius:8px;cursor:pointer;font:inherit;color:inherit}.pr:hover{background:var(--bg)}.pr b{min-width:2.2em;font-weight:600}.pr.warn b{color:var(--warn,#b45309)}.pr.info b{color:var(--mute)}
+.msg{margin:10px 0 0;font-size:14px}
+.pr{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;border:0!important;background:none!important;padding:9px 6px!important;min-height:0!important;border-radius:9px!important;font-weight:400!important;cursor:pointer}
+.pr+.pr{border-top:1px solid var(--line)!important;border-radius:0!important}
+.pr:hover{background:var(--paper)!important}
+.pr b{flex:0 0 2.4em;font-weight:700;font-size:12.5px;color:var(--mute)}
+.pr span{flex:1;min-width:0;white-space:normal;font-size:14px}
+.pr.warn{color:inherit}.pr.warn span::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-right:7px;vertical-align:1px}
+.stand{margin-top:22px;font-size:12px;color:var(--mute)}
+dialog{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);color:var(--ink);max-width:420px;box-shadow:var(--lift);padding:20px}
+dialog::backdrop{background:rgba(10,16,13,.35)}
+dialog .bar{justify-content:flex-end;margin-top:12px}
+dialog button{min-height:40px;border-radius:10px;border:1px solid var(--line2);background:var(--surface);padding:0 14px;font-weight:600}
+dialog button.pri{background:var(--accent);color:light-dark(#fff,#04140d);border-color:transparent}
+
+/* Tablet hochkant und Telefon: Seitenleiste als Blatt unten */
+@media (max-width:860px){
+  :root{--pw:0px}
+  .top{left:8px;right:8px;top:8px;height:auto;min-height:52px;flex-wrap:wrap;padding:6px;row-gap:6px}
+  .sync,.top .grow{display:none}
+  .top .back{order:0}.top .title{order:1;flex:1 1 calc(100% - 100px);max-width:none}#panel-t{order:2}
+  #floors{order:3}.top .views{order:4}#ifc{order:5;margin-left:auto}
+  .rail{left:8px;top:auto;bottom:calc(42vh + 16px);width:auto;flex-direction:row;padding:4px}
+  .rail button{padding:6px 8px 4px}
+  .rail hr{border-top:0;border-left:1px solid var(--line);margin:4px 2px}
+  .panel{top:auto;left:8px;right:8px;bottom:8px;width:auto;height:42vh}
+  body.nopanel .rail{bottom:16px}
+  .zoom{left:auto;right:8px;bottom:calc(42vh + 16px)}body.nopanel .zoom{bottom:16px}
+  .hint{display:none}
+  .note{left:8px;right:8px;transform:none;max-width:none}
+  .opts{top:auto;left:8px;right:8px;bottom:calc(42vh + 70px);max-width:none;width:auto}
+  .note{top:auto;bottom:calc(42vh + 70px)}
+}
+@media (max-width:600px){
+  .zoom{display:none!important}
+  .rail{right:8px;justify-content:space-between}
+  .seg button{padding:0 10px}
+  #ifc{padding:0 12px}
+  .lg{display:none}.sm{display:inline}
+  .top .views{order:4}#ifc{order:5;margin-left:auto}
+  .panel{height:36vh}.rail{bottom:calc(36vh + 16px)}
+  .opts,.note{bottom:calc(36vh + 74px)}
+}
+@media (prefers-reduced-motion:no-preference){.seg button,.tabs button,.rail button{transition:background-color .15s,color .15s}}
 </style>
 </head>
 <body>
-<header><a href="index.html">‹ Bestandsaufnahme</a><h1>Gebäudemodell</h1><span class="small" id="stand" title="Programmstand">Phase A · __BUILD__</span><span id="sync" class="sync">Verbinde …</span></header>
-<main>
-  <section class="card">
-    <div class="bar">
-      <select id="proj" aria-label="Projekt"></select>
-      <span id="floors" class="bar"></span>
-      <span class="sep"></span>
-      <button id="t-sel" data-tool="sel" aria-pressed="true">Auswahl</button>
-      <button id="t-wall" data-tool="wall" aria-pressed="false">Wand</button>
-      <button id="t-open" data-tool="open" aria-pressed="false">Öffnung</button>
-      <span class="sep"></span>
-      <button id="undo" title="Rückgängig (Strg+Z)" disabled>↶</button><button id="redo" title="Wiederholen (Strg+Y)" disabled>↷</button>
+<div class="fig" id="fig">
+  <svg id="plan" role="img" aria-label="Grundriss des Gebäudemodells"></svg><canvas id="c3d" hidden></canvas>
+</div>
+<header class="float top">
+  <a class="back" href="index.html" title="Zur Bestandsaufnahme" aria-label="Zur Bestandsaufnahme"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></a>
+  <select id="proj" class="title" aria-label="Projekt"></select>
+  <span id="sync" class="sync">Verbinde …</span>
+  <span class="grow"></span>
+  <nav id="floors" class="seg" aria-label="Geschoss"></nav>
+  <div class="seg views" role="group" aria-label="Ansicht"><button id="v2d" aria-pressed="true"><span class="lg">Grundriss</span><span class="sm">2D</span></button><button id="v3d" aria-pressed="false">3D</button><button id="vhaus" aria-pressed="false" title="Alle Geschosse übereinander mit Dach">Haus</button></div>
+  <button class="pri" id="ifc" title="IFC-Datei für Raumtool 3D erzeugen"><span class="lg">IFC exportieren</span><span class="sm">IFC</span></button>
+  <button class="icon" id="panel-t" aria-pressed="true" title="Seitenleiste ein- oder ausblenden" aria-label="Seitenleiste"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/></svg></button>
+</header>
+<nav class="float rail" aria-label="Werkzeuge">
+  <button id="t-sel" data-tool="sel" aria-pressed="true" title="Auswählen und Punkte ziehen"><svg viewBox="0 0 24 24"><path d="M6 3.5l12 6.8-5.3 1.4-2.6 5.3z"/></svg><span>Auswahl</span></button>
+  <button id="t-wall" data-tool="wall" aria-pressed="false" title="Wände zeichnen"><svg viewBox="0 0 24 24"><path d="M3.5 8.5h17v7h-17z"/><path d="M3.5 12h17" stroke-dasharray="2 2.2" stroke-width="1.2"/></svg><span>Wand</span></button>
+  <button id="t-open" data-tool="open" aria-pressed="false" title="Fenster und Türen setzen"><svg viewBox="0 0 24 24"><path d="M3 9h5v6H3zM16 9h5v6h-5z"/><path d="M8 12h8" stroke-width="1.2"/></svg><span>Öffnung</span></button>
+  <hr>
+  <button id="undo" title="Rückgängig (Strg+Z)" disabled><svg viewBox="0 0 24 24"><path d="M9 14L4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 010 11h-3"/></svg><span>Zurück</span></button>
+  <button id="redo" title="Wiederholen (Strg+Y)" disabled><svg viewBox="0 0 24 24"><path d="M15 14l4.5-4.5L15 5"/><path d="M19.5 9.5H10a5.5 5.5 0 000 11h3"/></svg><span>Vor</span></button>
+</nav>
+<div class="float opts" id="wallbar" hidden>
+  <select id="w-typ" aria-label="Wandtyp"><option value="aussen">Außenwand</option><option value="innen">Innenwand</option></select>
+  <label for="w-t">Dicke cm</label><input id="w-t" inputmode="decimal" value="36,5">
+  <select id="w-bezug" aria-label="Bezug der Maße"><option value="innen">Maße innen</option><option value="mitte">Maße Wandmitte</option><option value="aussen">Maße außen</option></select>
+  <button id="w-ortho" aria-pressed="true" title="Nur rechte Winkel">90°</button>
+  <span class="sep"></span>
+  <label for="w-len">Länge m</label><input id="w-len" inputmode="decimal" placeholder="8,49">
+  <button data-dir="0" title="nach rechts" aria-label="nach rechts">→</button><button data-dir="90" title="nach unten" aria-label="nach unten">↓</button><button data-dir="180" title="nach links" aria-label="nach links">←</button><button data-dir="270" title="nach oben" aria-label="nach oben">↑</button>
+  <button id="w-done">Fertig</button>
+</div>
+<div class="float opts" id="openbar" hidden>
+  <select id="o-typ" aria-label="Öffnungstyp"><option value="fenster">Fenster</option><option value="fenstertuer">Fenstertür</option><option value="innentuer">Innentür</option><option value="aussentuer">Außentür</option></select>
+  <label for="o-b">Breite m</label><input id="o-b" inputmode="decimal" value="1,20">
+  <label for="o-h">Höhe m</label><input id="o-h" inputmode="decimal" value="1,40">
+  <label for="o-brh">Brüstung m</label><input id="o-brh" inputmode="decimal" value="0,90">
+</div>
+<div class="float zoom" id="zoombox"><button id="z-in" aria-label="Vergrößern" title="Vergrößern"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="z-out" aria-label="Verkleinern" title="Verkleinern"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button id="z-fit" aria-label="Ganzen Grundriss zeigen" title="Ganzen Grundriss zeigen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
+<div class="hint" id="hint"></div>
+<p class="float note msg" id="saveinfo" role="status"></p>
+<aside class="float panel" id="panel">
+  <div class="tabs" role="tablist" aria-label="Seitenleiste">
+    <button role="tab" data-tab="auswahl" aria-selected="true">Auswahl</button><button role="tab" data-tab="raeume" aria-selected="false">Räume</button><button role="tab" data-tab="pruefung" aria-selected="false" id="tab-pruef">Prüfung</button><button role="tab" data-tab="dach" aria-selected="false">Dach</button><button role="tab" data-tab="datei" aria-selected="false">Datei</button>
+  </div>
+  <section class="pane" data-pane="auswahl" id="props"><h2>Auswahl</h2><p class="lead">Wand, Öffnung oder Raum antippen.</p></section>
+  <section class="pane" data-pane="raeume" hidden><h2>Räume</h2><div id="rooms"></div></section>
+  <section class="pane" data-pane="pruefung" id="pruefcard" hidden><h2 id="pruef-h">Prüfung</h2><div id="pruef"></div></section>
+  <section class="pane" data-pane="dach" id="dachcard" hidden><h2>Dach</h2>
+    <div class="gridlab">
+      <label for="d-form">Form</label><select id="d-form"><option value="sattel">Satteldach</option><option value="walm">Walmdach</option><option value="zelt">Zeltdach</option><option value="pult">Pultdach</option><option value="flach">Flachdach</option><option value="kein">kein Dach</option></select>
+      <label for="d-neig">Neigung °</label><input id="d-neig" inputmode="decimal">
+      <label for="d-first">First</label><select id="d-first"><option value="lang">parallel zur langen Seite</option><option value="quer">parallel zur kurzen Seite</option></select>
+      <label for="d-knie">Kniestock cm</label><input id="d-knie" inputmode="decimal">
+      <label for="d-ut">Überstand Traufe cm</label><input id="d-ut" inputmode="decimal">
+      <label for="d-uo">Überstand Ortgang cm</label><input id="d-uo" inputmode="decimal">
+      <label for="d-dicke">Dachaufbau cm</label><input id="d-dicke" inputmode="decimal">
+      <label for="d-teile">Grundriss</label><select id="d-teile"><option value="auto">in Rechtecke zerlegen (L, T, U, Anbauten)</option><option value="rechteck">ein Rechteck um alles</option></select>
+      <label for="d-bezug">Dach sitzt</label><select id="d-bezug"><option value="decke">auf der obersten Geschossdecke (kalter Dachraum)</option><option value="boden">auf dem obersten Geschoss (ausgebautes Dach)</option></select>
     </div>
-    <div class="fig" id="fig">
-    <div class="opts bar" id="wallbar" hidden>
-      <select id="w-typ" aria-label="Wandtyp"><option value="aussen">Außenwand</option><option value="innen">Innenwand</option></select>
-      <label class="small" for="w-t">Dicke cm</label><input id="w-t" inputmode="decimal" value="36,5">
-      <select id="w-bezug" aria-label="Bezug der Maße"><option value="innen">Maße innen</option><option value="mitte">Maße Wandmitte</option><option value="aussen">Maße außen</option></select>
-      <button id="w-ortho" aria-pressed="true" title="Nur rechte Winkel">90°</button>
-      <span class="sep"></span>
-      <label class="small" for="w-len">Länge m</label><input id="w-len" inputmode="decimal" placeholder="z. B. 8,49">
-      <button data-dir="0" title="nach rechts">→</button><button data-dir="90" title="nach unten">↓</button><button data-dir="180" title="nach links">←</button><button data-dir="270" title="nach oben">↑</button>
-      <button id="w-done">Fertig</button>
-    </div>
-    <div class="opts bar" id="openbar" hidden>
-      <select id="o-typ" aria-label="Öffnungstyp"><option value="fenster">Fenster</option><option value="fenstertuer">Fenstertür</option><option value="innentuer">Innentür</option><option value="aussentuer">Außentür</option></select>
-      <label class="small" for="o-b">Breite m</label><input id="o-b" inputmode="decimal" value="1,20">
-      <label class="small" for="o-h">Höhe m</label><input id="o-h" inputmode="decimal" value="1,40">
-      <label class="small" for="o-brh">Brüstung m</label><input id="o-brh" inputmode="decimal" value="0,90">
-    </div>
-      <svg id="plan" role="img" aria-label="Grundriss des Gebäudemodells"></svg><canvas id="c3d" hidden></canvas>
-      <div class="views bar"><button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button><button id="vhaus" aria-pressed="false" title="Alle Geschosse übereinander mit Dach">Haus</button></div>
-      <div class="zoom" id="zoombox"><button id="z-in" aria-label="Vergrößern">+</button><button id="z-out" aria-label="Verkleinern">−</button><button id="z-fit" aria-label="Ganzen Grundriss zeigen">⤢</button></div>
-      <div class="hint" id="hint"></div>
-    </div>
+    <p class="small" id="d-info"></p>
   </section>
-  <aside class="side">
-    <section class="card" id="props"><h2>Auswahl</h2><p class="small">Wand, Öffnung oder Raum antippen.</p></section>
-    <section class="card"><h2>Räume</h2><div id="rooms"></div></section>
-    <section class="card" id="pruefcard"><h2 id="pruef-h">Prüfung</h2><div id="pruef" class="small"></div></section>
-    <section class="card" id="dachcard"><h2>Dach</h2>
-      <div class="gridlab">
-        <label class="small" for="d-form">Form</label><select id="d-form"><option value="sattel">Satteldach</option><option value="walm">Walmdach</option><option value="zelt">Zeltdach</option><option value="pult">Pultdach</option><option value="flach">Flachdach</option><option value="kein">kein Dach</option></select>
-        <label class="small" for="d-neig">Neigung °</label><input id="d-neig" inputmode="decimal">
-        <label class="small" for="d-first">First</label><select id="d-first"><option value="lang">parallel zur langen Seite</option><option value="quer">parallel zur kurzen Seite</option></select>
-        <label class="small" for="d-knie">Kniestock cm</label><input id="d-knie" inputmode="decimal">
-        <label class="small" for="d-ut">Überstand Traufe cm</label><input id="d-ut" inputmode="decimal">
-        <label class="small" for="d-uo">Überstand Ortgang cm</label><input id="d-uo" inputmode="decimal">
-        <label class="small" for="d-dicke">Dachaufbau cm</label><input id="d-dicke" inputmode="decimal">
-        <label class="small" for="d-teile">Grundriss</label><select id="d-teile"><option value="auto">in Rechtecke zerlegen (L, T, U, Anbauten)</option><option value="rechteck">ein Rechteck um alles</option></select>
-        <label class="small" for="d-bezug">Dach sitzt</label><select id="d-bezug"><option value="decke">auf der obersten Geschossdecke (kalter Dachraum)</option><option value="boden">auf dem obersten Geschoss (ausgebautes Dach)</option></select>
-      </div>
-      <p class="small" id="d-info"></p>
-    </section>
-    <section class="card"><h2>Modell</h2>
-      <div class="bar"><button class="pri" id="save">Speichern</button><button id="ifc">IFC exportieren</button><button id="reimport" title="Modell aus den Räumen der Bestandsaufnahme neu erzeugen">Neu übernehmen</button></div>
-      <p class="msg small" id="saveinfo"></p>
-    </section>
-  </aside>
-</main>
-<dialog id="dlg"><p id="dlg-t"></p><div class="bar" style="justify-content:flex-end"><button id="dlg-no">Abbrechen</button><button class="pri" id="dlg-yes">Übernehmen</button></div></dialog>
+  <section class="pane" data-pane="datei" hidden><h2>Datei</h2>
+    <p class="lead">Änderungen werden automatisch auf diesem Gerät gespeichert. Der Export legt die IFC-Datei für Raumtool 3D und die Prüfdaten nebeneinander ab.</p>
+    <div class="bar"><button class="pri" id="save">Jetzt speichern</button><button id="reimport" title="Modell aus den Räumen der Bestandsaufnahme neu erzeugen">Aus Bestandsaufnahme neu erzeugen</button></div>
+    <p class="stand" id="stand" title="Programmstand">Stand __BUILD__</p>
+  </section>
+</aside>
+<dialog id="dlg"><p id="dlg-t"></p><div class="bar"><button id="dlg-no">Abbrechen</button><button class="pri" id="dlg-yes">Übernehmen</button></div></dialog>
 <script>/*CORE*/</script>
 <script>/*IFC*/</script>
 <script>
@@ -134,7 +235,7 @@ const nf = (v, d = 2) => v == null || isNaN(v) ? '–' : Number(v).toLocaleStrin
 const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isNaN(v) ? null : v; };
 const MODEL_VERSION = 4; // 2: Hilfskanten; 3: Querwand-Lücken; 4: Raumtrennung ohne Wand
 window.__gm = null;
-const st = { db: null, projects: {}, models: {}, pid: null, fid: null, floors: [], tool: 'sel', view: '2d', sel: null, chain: null, hover: null, drag: null, pan: null, vw: null, undo: [], redo: [], dirty: false, saveTimer: null, t3: null, lastDir: 0 };
+const st = { db: null, projects: {}, models: {}, pid: null, fid: null, floors: [], tool: 'sel', view: '2d', sel: null, chain: null, hover: null, drag: null, pan: null, vw: null, undo: [], redo: [], dirty: false, saveTimer: null, t3: null, lastDir: 0, tab: 'auswahl', lastSel: '' };
 
 /* ---------- Laden ---------- */
 function setSync(t, cls) { const e = $('sync'); e.textContent = t; e.className = 'sync ' + (cls || ''); }
@@ -265,11 +366,19 @@ async function save() {
 }
 
 /* ---------- Ansicht, Koordinaten ---------- */
+// freie Fläche zwischen den schwebenden Leisten (Bildschirmkoordinaten der Arbeitsfläche)
+function freeRect(W, H) {
+  const box = el => { const e = $(el) || document.querySelector(el); const r = e && !e.hidden ? e.getBoundingClientRect() : null; return r && r.width > 0 ? r : null; };
+  const tb = box('.top'), rl = box('.rail'), pn = box('panel'), op = box(st.tool === 'wall' ? 'wallbar' : st.tool === 'open' ? 'openbar' : 'x'), narrow = innerWidth <= 860;
+  let L = narrow ? 8 : (rl ? rl.right : 0) + 12, T = Math.max(tb ? tb.bottom : 0, op ? op.bottom : 0) + 12, R = narrow || !pn ? W - 8 : pn.left - 12, B = narrow ? Math.min(pn ? pn.top : H, rl ? rl.top : H) - 10 : H - 56;
+  if (R - L < 200) { L = 8; R = W - 8; } if (B - T < 160) { T = 8; B = H - 8; }
+  return { L, T, R, B }; }
 function fit() {
   const f = fl(), svg = $('plan'), W = svg.clientWidth || 800, H = svg.clientHeight || 500; let x0 = 1e12, y0 = 1e12, x1 = -1e12, y1 = -1e12;
   (f ? f.g.knoten : []).forEach(n => { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); });
   if (x1 < x0) { x0 = 0; y0 = 0; x1 = 10000; y1 = 8000; }
-  const top = st.tool === 'sel' ? 0 : 70, pad = 800, k = Math.min(W / (x1 - x0 + 2 * pad), (H - top) / (y1 - y0 + 2 * pad)); st.vw = { k, ox: (W - (x1 - x0) * k) / 2 - x0 * k, oy: top + (H - top - (y1 - y0) * k) / 2 - y0 * k };
+  // freie Fläche zwischen den schwebenden Leisten
+  const { L, T, R, B } = freeRect(W, H), pad = 600, k = Math.min((R - L) / (x1 - x0 + 2 * pad), (B - T) / (y1 - y0 + 2 * pad)); st.vw = { k, ox: L + (R - L - (x1 - x0) * k) / 2 - x0 * k, oy: T + (B - T - (y1 - y0) * k) / 2 - y0 * k };
 }
 function zoomAt(fac, sx, sy) { const v = st.vw; const k2 = Math.max(0.005, Math.min(2, v.k * fac)); v.ox = sx - (sx - v.ox) * k2 / v.k; v.oy = sy - (sy - v.oy) * k2 / v.k; v.k = k2; draw2d(); }
 const toW = e => { const r = $('plan').getBoundingClientRect(), v = st.vw; return [(e.clientX - r.left - v.ox) / v.k, (e.clientY - r.top - v.oy) / v.k]; };
@@ -343,17 +452,20 @@ function draw2d() {
   const svg = $('plan'), f = fl(); if (!f) return; if (!st.vw) fit();
   const W = svg.clientWidth || 800, H = svg.clientHeight || 500, g = f.g, N = new Map(g.knoten.map(n => [n.id, n])), P = q => q.map(c => toS(c).map(v => v.toFixed(1)).join(',')).join(' ');
   const rooms = GM.roomsWithMeta(g, f.meta), sel = st.sel; let s = '';
+  { // Punktraster 1 m (bei kleinem Maßstab 5 m) als Planblatt
+    const m = st.vw.k * 1000 >= 14 ? 1000 : 5000, d = m * st.vw.k, ox = ((st.vw.ox % d) + d) % d, oy = ((st.vw.oy % d) + d) % d;
+    s += `<defs><pattern id="raster" width="${d.toFixed(2)}" height="${d.toFixed(2)}" patternUnits="userSpaceOnUse" x="${ox.toFixed(2)}" y="${oy.toFixed(2)}"><circle cx="0" cy="0" r="1.1" fill="var(--dot)"/><circle cx="${d.toFixed(2)}" cy="0" r="1.1" fill="var(--dot)"/><circle cx="0" cy="${d.toFixed(2)}" r="1.1" fill="var(--dot)"/><circle cx="${d.toFixed(2)}" cy="${d.toFixed(2)}" r="1.1" fill="var(--dot)"/></pattern></defs><rect width="100%" height="100%" fill="url(#raster)"/>`; }
   rooms.forEach(r => { const on = sel && sel.kind === 'room' && GM.inPoly(sel.mitte, r.kontur); s += `<polygon points="${P(r.kontur)}" fill="${on ? 'var(--soft)' : 'var(--room)'}"/>`; });
   const wallPoly = w => P(quad(N.get(w.a), N.get(w.b), w));
   g.waende.filter(w => !w.ext && !GM.isHilf(w)).forEach(w => { s += `<polygon points="${wallPoly(w)}" fill="var(--wallin)"/>`; });
   g.waende.filter(w => w.ext && !GM.isHilf(w)).forEach(w => { s += `<polygon points="${wallPoly(w)}" fill="var(--wall)"/>`; });
   GM.nodeCaps(g).forEach(c => { s += `<polygon points="${P(c.poly)}" fill="${c.ext ? 'var(--wall)' : 'var(--wallin)'}"/>`; });
-  g.oeffnungen.forEach(o => { const w = g.waende.find(x => x.id === o.wand); if (!w) return; const tuer = /tuer/.test(o.typ || ''), on = sel && sel.kind === 'open' && sel.id === o.id; s += `<polygon points="${P(quad(N.get(w.a), N.get(w.b), { t: w.t + 30, ts: (w.ts == null ? w.t / 2 : w.ts) + 15 }, o.abstand, o.abstand + o.breite))}" fill="var(--bg)" stroke="${on ? 'var(--sel)' : tuer ? 'var(--door)' : 'var(--win)'}" stroke-width="${on ? 3 : 2}"/>`; });
+  g.oeffnungen.forEach(o => { const w = g.waende.find(x => x.id === o.wand); if (!w) return; const tuer = /tuer/.test(o.typ || ''), on = sel && sel.kind === 'open' && sel.id === o.id; s += `<polygon points="${P(quad(N.get(w.a), N.get(w.b), { t: w.t + 30, ts: (w.ts == null ? w.t / 2 : w.ts) + 15 }, o.abstand, o.abstand + o.breite))}" fill="var(--room)" stroke="${on ? 'var(--sel)' : tuer ? 'var(--door)' : 'var(--win)'}" stroke-width="${on ? 3 : 2}"/>`; });
   if (sel && sel.kind === 'wall') { const w = g.waende.find(x => x.id === sel.id); if (w) s += `<polygon points="${wallPoly(w)}" fill="none" stroke="var(--sel)" stroke-width="3"/>`; }
-  g.waende.forEach(w => { const a = toS([N.get(w.a).x, N.get(w.a).y]), b = toS([N.get(w.b).x, N.get(w.b).y]); s += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3" opacity=".85"/>`; });
-  if (st.tool === 'sel') g.knoten.forEach(n => { const c = toS(st.drag && st.drag.id === n.id ? st.drag.p : [n.x, n.y]); s += `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${st.drag && st.drag.id === n.id ? 6 : 3.5}" fill="var(--accent)"/>`; });
+  g.waende.forEach(w => { const a = toS([N.get(w.a).x, N.get(w.a).y]), b = toS([N.get(w.b).x, N.get(w.b).y]); s += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="var(--axis)" stroke-width="1" stroke-dasharray="3 3"/>`; });
+  if (st.tool === 'sel') g.knoten.forEach(n => { const c = toS(st.drag && st.drag.id === n.id ? st.drag.p : [n.x, n.y]); s += `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${st.drag && st.drag.id === n.id ? 6 : 3}" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>`; });
   if (st.drag && st.drag.moved) { const n0 = N.get(st.drag.id); g.waende.filter(w => w.a === n0.id || w.b === n0.id).forEach(w => { const o = w.a === n0.id ? N.get(w.b) : N.get(w.a), a = toS(st.drag.p), b = toS([o.x, o.y]); s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--sel)" stroke-width="2"/>`; }); }
-  rooms.forEach(r => { const c = toS(GM.centroid(r.kontur)); s += `<text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">${esc(r.name)}</text><text x="${c[0].toFixed(1)}" y="${(c[1] + 18).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--mute)">${nf(r.flaeche_m2)} m²</text>`; });
+  rooms.forEach(r => { const c = toS(GM.centroid(r.kontur)); s += `<text x="${c[0].toFixed(1)}" y="${(c[1] - 2).toFixed(1)}" text-anchor="middle" font-size="13.5" font-weight="650" letter-spacing="-.01em" fill="var(--ink)">${esc(r.name)}</text><text x="${c[0].toFixed(1)}" y="${(c[1] + 15).toFixed(1)}" text-anchor="middle" font-size="12" fill="var(--mute)" style="font-variant-numeric:tabular-nums">${nf(r.flaeche_m2)} m²</text>`; });
   if (st.tool === 'wall' && st.chain) { const pts = st.chain.pts.map(toS); if (st.hover) { const a = pts[pts.length - 1], h = toS(st.hover), L = Math.hypot(st.hover[0] - st.chain.pts[st.chain.pts.length - 1][0], st.hover[1] - st.chain.pts[st.chain.pts.length - 1][1]); s += `<line x1="${a[0]}" y1="${a[1]}" x2="${h[0]}" y2="${h[1]}" stroke="var(--sel)" stroke-width="2" stroke-dasharray="6 4"/><text x="${((a[0] + h[0]) / 2 + 8).toFixed(1)}" y="${((a[1] + h[1]) / 2 - 8).toFixed(1)}" font-size="14" font-weight="600" fill="var(--sel)">${nf(L / 1000)} m</text>`; } pts.forEach(c => { s += `<circle cx="${c[0]}" cy="${c[1]}" r="4" fill="var(--sel)"/>`; }); }
   if (st.tool !== 'sel' && st.hover) { const c = toS(st.hover); s += `<circle cx="${c[0]}" cy="${c[1]}" r="6" fill="none" stroke="var(--sel)" stroke-width="2"/>`; }
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.innerHTML = s; svg.classList.toggle('sel', st.tool === 'sel');
@@ -370,8 +482,9 @@ for (const [id, k, f] of DF) $(id).addEventListener('change', e => { const v = f
 function renderPruefung() {
   const box = $('pruef'); if (!st.pid) { box.textContent = ''; return; } let list = [];
   try { list = GMIFC.pruefen(modelDoc()); } catch (e) { box.textContent = 'Prüfung nicht möglich: ' + e.message; return; }
-  const nw = list.filter(x => x.lv === 'warn').length; $('pruef-h').textContent = nw ? 'Prüfung · ' + nw + (nw === 1 ? ' Hinweis' : ' Hinweise') : 'Prüfung';
-  if (!list.length) { box.innerHTML = '<p>Alles in Ordnung: Wände ohne Überschneidung, Öffnungen in ihren Wänden, Räume wie in der Bestandsaufnahme.</p>'; return; }
+  const nw = list.filter(x => x.lv === 'warn').length; $('pruef-h').textContent = nw ? nw + (nw === 1 ? ' Punkt prüfen' : ' Punkte prüfen') : 'Prüfung';
+  $('tab-pruef').innerHTML = 'Prüfung' + (nw ? '<span class="badge">' + nw + '</span>' : '');
+  if (!list.length) { $('tab-pruef').textContent = 'Prüfung'; box.innerHTML = '<p class="lead">Alles in Ordnung: Wände ohne Überschneidung, Öffnungen in ihren Wänden, Räume wie in der Bestandsaufnahme.</p>'; return; }
   box.innerHTML = list.map((x, i) => `<button class="pr ${x.lv}" data-i="${i}"><b>${esc(x.gname || '')}</b><span>${esc(x.text)}</span></button>`).join('');
   box.querySelectorAll('button.pr').forEach(b => b.onclick = () => { const x = list[+b.dataset.i]; if (x.geschoss !== st.fid) selectFloor(x.geschoss); if (st.view !== '2d') setView('2d'); st.sel = x.sel || null; refresh(); });
 }
@@ -406,8 +519,12 @@ function renderProps() {
     $('p-n').onchange = e => upd({ name: e.target.value.trim() || r.name }); $('p-u').onchange = e => upd({ nutzung: e.target.value.trim() }); $('p-temp').onchange = e => upd({ temp: num(e.target.value) }); }
 }
 function updButtons() { $('undo').disabled = !st.undo.length; $('redo').disabled = !st.redo.length; }
-function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht, Mausrad zoomt.' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt antippen oder Länge + Richtung · Esc oder „Fertig“ beendet' : 'Ersten Punkt antippen') : st.tool === 'open' ? 'Wand antippen, um die Öffnung zu setzen' : 'Ziehen auf leerer Fläche verschiebt den Plan · Mausrad zoomt'; }
-function refresh(refit) { if (refit) st.vw = null; const f = fl(); if (!f) return; st.view !== '2d' ? draw3d() : draw2d(); renderRooms(); renderDach(); renderPruefung(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
+function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht das Modell, Mausrad oder zwei Finger zoomen' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt antippen oder Länge und Richtung eingeben, Esc beendet die Wand' : 'Ersten Punkt der Wand antippen') : st.tool === 'open' ? 'Wand antippen, um Fenster oder Tür zu setzen' : 'Leere Fläche ziehen verschiebt den Plan, Mausrad oder zwei Finger zoomen'; }
+/* Seitenleiste: Register, ein-/ausblenden; neue Auswahl im Plan öffnet das Register „Auswahl“ */
+function setTab(t) { st.tab = t; document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t; }); }
+function selKey(x) { return x ? x.kind + ':' + (x.id || (x.mitte || []).join(',')) : ''; }
+function refresh(refit) { if (refit) st.vw = null; const f = fl(); if (!f) return;
+  const k = selKey(st.sel); if (k && k !== st.lastSel && st.tab !== 'auswahl' && !document.body.classList.contains('nopanel')) setTab('auswahl'); st.lastSel = k; st.view !== '2d' ? draw3d() : draw2d(); renderRooms(); renderDach(); renderPruefung(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
 
 /* ---------- Zeiger ---------- */
 const svg = $('plan');
@@ -459,7 +576,7 @@ async function draw3d() {
   const t = st.t3; if (t.grp) t.scene.remove(t.grp); const grp = new T.Group(); t.grp = grp;
   const probe = document.createElement('i'); document.body.appendChild(probe); const col = v => { probe.style.color = `var(${v})`; return new T.Color(getComputedStyle(probe).color); };
   const mExt = new T.MeshLambertMaterial({ color: col('--w3e') }), mIn = new T.MeshLambertMaterial({ color: col('--w3i') }), mFl = new T.MeshLambertMaterial({ color: col('--room'), side: T.DoubleSide }), mWin = new T.MeshLambertMaterial({ color: col('--win'), transparent: true, opacity: 0.45 });
-  const mSlab = new T.MeshLambertMaterial({ color: col('--w3i'), transparent: true, opacity: 0.55 }), mRoof = new T.MeshLambertMaterial({ color: new T.Color(0xb5523b), side: T.DoubleSide }); probe.remove();
+  const mSlab = new T.MeshLambertMaterial({ color: col('--w3i'), transparent: true, opacity: 0.55 }), mRoof = new T.MeshLambertMaterial({ color: col("--roof"), side: T.DoubleSide }); probe.remove();
   // Haus: alle Geschosse übereinander (wie im IFC), sonst nur das gewählte Geschoss
   const haus = st.view === 'haus', doc = modelDoc(), stp = GM.stapeln(doc.geschosse.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })));
   const DA = haus ? GM.dach(doc, st.dach) : null;
@@ -497,7 +614,7 @@ async function draw3d() {
   if (x1 < x0) { x0 = z0 = 0; x1 = z1 = 8000; }
   t.c = [(x0 + x1) / 2, haus ? (yTop + yBot) / 2 : 1000, (z0 + z1) / 2]; t.dist = Math.max(x1 - x0, z1 - z0, haus ? yTop - yBot : 0) * (haus ? 2.3 : 1.9) + 4000; t.scene.add(grp); frame();
 }
-function frame() { const t = st.t3, cv = $('c3d'); if (!t) return; const w = cv.clientWidth || 800, h = cv.clientHeight || 500; t.rnd.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); t.rnd.setSize(w, h, false); t.cam.aspect = w / h; t.cam.updateProjectionMatrix(); t.cam.position.set(t.c[0] + Math.cos(t.rot) * Math.cos(t.tilt) * t.dist, t.c[1] + Math.sin(t.tilt) * t.dist, t.c[2] + Math.sin(t.rot) * Math.cos(t.tilt) * t.dist); t.cam.lookAt(t.c[0], t.c[1], t.c[2]); t.rnd.render(t.scene, t.cam); }
+function frame() { const t = st.t3, cv = $('c3d'); if (!t) return; const w = cv.clientWidth || 800, h = cv.clientHeight || 500; t.rnd.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); t.rnd.setSize(w, h, false); t.cam.aspect = w / h; { const fr = freeRect(w, h), dx = (fr.L + fr.R) / 2 - w / 2, dy = (fr.T + fr.B) / 2 - h / 2; t.cam.setViewOffset(w, h, -dx, -dy, w, h); t.zf = Math.max(1, w / Math.max(200, fr.R - fr.L), h / Math.max(160, fr.B - fr.T)) * 0.8; } t.cam.updateProjectionMatrix(); const D = t.dist * (t.zf || 1); t.cam.position.set(t.c[0] + Math.cos(t.rot) * Math.cos(t.tilt) * D, t.c[1] + Math.sin(t.tilt) * D, t.c[2] + Math.sin(t.rot) * Math.cos(t.tilt) * D); t.cam.lookAt(t.c[0], t.c[1], t.c[2]); t.rnd.render(t.scene, t.cam); }
 
 /* ---------- Bedienelemente ---------- */
 function selectFloor(id) { st.fid = id; st.sel = null; st.chain = null; [...$('floors').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.f === id)); refresh(true); }
@@ -505,6 +622,11 @@ function setTool(t) { if (st.chain) endChain(false); st.tool = t; st.hover = nul
 function setView(v) { st.view = v; $('v2d').setAttribute('aria-pressed', v === '2d'); $('v3d').setAttribute('aria-pressed', v === '3d'); $('vhaus').setAttribute('aria-pressed', v === 'haus'); $('plan').toggleAttribute('hidden', v !== '2d'); $('c3d').toggleAttribute('hidden', v === '2d'); $('zoombox').hidden = v !== '2d'; refresh(); }
 function confirmBox(text) { return new Promise(res => { const d = $('dlg'); $('dlg-t').textContent = text; d.showModal(); const done = v => { d.close(); $('dlg-yes').onclick = $('dlg-no').onclick = null; res(v); }; $('dlg-yes').onclick = () => done(true); $('dlg-no').onclick = () => done(false); }); }
 $('proj').addEventListener('change', e => { if (st.dirty) save(); selectProject(e.target.value); });
+document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
+$('panel-t').addEventListener('click', () => { const off = document.body.classList.toggle('nopanel'); $('panel-t').setAttribute('aria-pressed', !off); try { localStorage.setItem('gm.panel', off ? '0' : '1'); } catch (e) {} if (st.view === '2d') refresh(true); else frame(); });
+try { if (localStorage.getItem('gm.panel') === '0') { document.body.classList.add('nopanel'); $('panel-t').setAttribute('aria-pressed', 'false'); } } catch (e) {}
+{ let tm; const n = $('saveinfo'); new MutationObserver(() => { clearTimeout(tm); if (n.textContent && !n.querySelector('button') && !/\.\.\.|…$/.test(n.textContent)) tm = setTimeout(() => { n.textContent = ''; }, 9000); }).observe(n, { childList: true, characterData: true, subtree: true });
+  n.addEventListener('click', e => { if (!e.target.closest('button')) n.textContent = ''; }); }
 $('floors').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) selectFloor(b.dataset.f); });
 ['sel', 'wall', 'open'].forEach(k => $('t-' + k).addEventListener('click', () => setTool(k)));
 $('v2d').addEventListener('click', () => setView('2d')); $('v3d').addEventListener('click', () => { if (st.tool !== 'sel') setTool('sel'); setView('3d'); });
@@ -528,7 +650,7 @@ document.addEventListener('keydown', e => {
 });
 new ResizeObserver(() => { if (st.view === '2d') draw2d(); else frame(); }).observe($('fig'));
 window.addEventListener('pagehide', () => { if (st.dirty) save(); });
-window.__gm = { st, hit: p => hit(p) };
+window.__gm = { st, hit: p => hit(p), freeRect, frame }; // für Oberflächentests
 init();
 }
 </script>
