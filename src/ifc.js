@@ -178,10 +178,11 @@
           const [f1, f2] = DA.flaechen.map(q => q.map(toI)), dz = DA.dicke / 1000 / Math.cos(Math.atan2(f1[2][2] - f1[0][2], Math.hypot(f1[2][0] - f1[1][0], f1[2][1] - f1[1][1])));
           const a0 = f1[0], a1 = f1[1], ridge0 = f1[3], e2 = f2[0], L = Math.hypot(a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2]), Xr = nrm(sub3(a1, a0)), up = [0, 0, 1], Yh = nrm(sub3(e2, a0)), Zx = crs(Xr, up);
           // Profil in der Ebene durch a0 senkrecht zum First: lokale Achsen X = quer (Yh), Y = oben, extrudiert entlang des Firsts
-          const loc = c => { const d = sub3(c, a0); return [dot3(d, Yh), d[2]]; }, pe1 = loc(a0), pr = loc(ridge0), pe2 = loc(e2);
+          // lokale Achsen: Z = First (Extrusion), X = quer, Y = Z × X muss nach oben zeigen – sonst X umdrehen (Dach stünde kopf)
+          const Xq = dot3(crs(Xr, Yh), up) >= 0 ? Yh : Yh.map(v => -v);
+          const loc = c => { const d = sub3(c, a0); return [dot3(d, Xq), d[2]]; }, pe1 = loc(a0), pr = loc(ridge0), pe2 = loc(e2);
           const prof = [pe1, pr, pe2, [pe2[0], pe2[1] - dz], [pr[0], pr[1] - dz], [pe1[0], pe1[1] - dz]];
-          const Zax = crs(Yh, up), sign = dot3(Zax, Xr) >= 0 ? 1 : -1;
-          const pl = E(`IFCLOCALPLACEMENT(${lpS},${E(`IFCAXIS2PLACEMENT3D(${P3(...a0)},${D3(...Zax.map(v => v * sign))},${D3(...Yh)})`)})`);
+          const pl = E(`IFCLOCALPLACEMENT(${lpS},${E(`IFCAXIS2PLACEMENT3D(${P3(...a0)},${D3(...Xr)},${D3(...Xq)})`)})`);
           const body = E(`IFCEXTRUDEDAREASOLID(${E(`IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,${poly2(ccw(prof))})`)},${E(`IFCAXIS2PLACEMENT3D(${P3(0, 0, 0)},${zd},${xd})`)},${zd},${R(L)})`);
           const sl = E(`IFCSLAB(${G('df|' + f.id + '|s')},${oh},${S('Satteldach')},$,$,${pl},${SH(body)},$,.ROOF.)`); parts.push(sl);
           PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)]], 'dfc|' + f.id + '|s');

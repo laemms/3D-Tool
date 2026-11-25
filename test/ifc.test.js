@@ -62,5 +62,16 @@ assert.strictEqual(exportIFC(model, { zeit: Date.UTC(2026, 10, 25), bearbeiter: 
   console.log('web-ifc:', JSON.stringify(c), 'Körper mit Geometrie:', meshes, 'Bytes', txt.length);
   assert.deepStrictEqual([c.Geschosse, c.Wände, c.Räume], [2, 22, 5]); assert.strictEqual(c.Öffnungen, c.Fenster + c.Türen);
   assert.ok(meshes >= c.Wände + c.Fenster + c.Türen, 'nicht alle Körper erzeugen Geometrie'); // web-ifc streamt Räume und Öffnungen nicht
-  api.CloseModel(id); console.log('IFC geprüft');
+  api.CloseModel(id);
+  // Satteldach steht in beiden Firstrichtungen aufrecht (Oberkante über der Traufe)
+  const o = require('./core.test.js').offen;
+  for (const first of ['lang', 'quer']) {
+    const t = exportIFC({ id: 't', geschosse: [{ ...o, niveau_mm: 0, geschossHoehe_mm: 2800 }], dach: { form: 'sattel', neigung: 35, first, kniestock: 0, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: 'decke' } });
+    const m = api.OpenModel(new Uint8Array(Buffer.from(t))); let lo = 1e9, hi = -1e9;
+    api.StreamAllMeshes(m, ms => { const ln = api.GetLine(m, ms.expressID); if (ln.type !== WebIFC.IFCSLAB || !/Satteldach/.test(ln.Name && ln.Name.value)) return;
+      for (let i = 0; i < ms.geometries.size(); i++) { const pg = ms.geometries.get(i), g = api.GetGeometry(m, pg.geometryExpressID), v = api.GetVertexArray(g.GetVertexData(), g.GetVertexDataSize()), T = pg.flatTransformation;
+        for (let k = 0; k < v.length; k += 6) { const y = T[1] * v[k] + T[5] * v[k + 1] + T[9] * v[k + 2] + T[13]; lo = Math.min(lo, y); hi = Math.max(hi, y); } } });
+    api.CloseModel(m); assert.ok(lo > 2.0 && hi > 4.5, 'Satteldach (First ' + first + ') steht falsch: ' + lo.toFixed(2) + '…' + hi.toFixed(2));
+  }
+  console.log('ok  Satteldach in beiden Firstrichtungen aufrecht'); console.log('IFC geprüft');
 })().catch(e => { console.error(e); process.exit(1); });
