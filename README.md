@@ -35,6 +35,8 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Abgeleitete Daten (Raumkontur, Fläche, Begrenzungen) erzeugt nur der Kern.
 - Jede Änderung: `node test/core.test.js`, `node test/ifc.test.js`, `node build.js`, `python3 test/page_test.py`.
 - Wände: Achse a→b, Dicke `t` (mm), `ts` = Dickenanteil auf der S-Seite (rechts der Laufrichtung im Bildschirm).
+- Raumtrennung ohne Wand (offener Übergang) geht als 2-cm-Wand „Virtuelle Wand“ ins IFC: Raumtool 3D (K12) trennt
+  Räume nur an Wänden, ignoriert `IfcVirtualElement` und Wände unter 2 cm (Test 25.11.2026). Kostet je Raum ~0,04 m².
 
 ## Betrieb
 

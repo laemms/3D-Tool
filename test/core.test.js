@@ -88,6 +88,7 @@ console.log(ok + ' Tests bestanden');
     for (const q of res.quellraeume) { const m = res.raeume.find(r => r.bestandsaufnahme && r.bestandsaufnahme.id === q.id); assert.ok(m && Math.abs(m.flaeche_m2 - q.flaeche_m2) < 0.02, q.name + ' ' + (m && m.flaeche_m2) + ' statt ' + q.flaeche_m2); }
     assert.strictEqual(res.raeume.length, 3);
   });
+  module.exports.offen = { id: 'eg', name: 'EG', knoten: res.graph.knoten, waende: res.graph.waende, oeffnungen: res.graph.oeffnungen, raeume: res.raeume.map(r => ({ name: r.bestandsaufnahme.name, mitte: GM.centroid(r.kontur) })) };
 }
 console.log('Bearbeiten geprüft');
 
@@ -102,5 +103,5 @@ console.log('Bearbeiten geprüft');
     for (const q of res.quellraeume) { const m = res.raeume.find(r => r.bestandsaufnahme && r.bestandsaufnahme.id === q.id); assert.ok(m && Math.abs(m.flaeche_m2 - q.flaeche_m2) < 0.02, q.name + ' ' + (m && m.flaeche_m2) + ' statt ' + q.flaeche_m2); }
     assert.strictEqual(res.raeume.length, 5); assert.strictEqual(kurz.length, 0, 'kurze Wände: ' + kurz.map(w => w.t).join(','));
   });
-  module.exports = { querwand: { name: 'OG', ...g } };
+  module.exports.querwand = { name: 'OG', ...g };
 }

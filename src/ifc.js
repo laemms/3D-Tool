@@ -112,7 +112,27 @@
           PS(fill, tuer ? 'Pset_DoorCommon' : 'Pset_WindowCommon', [['IsExternal', 'IFCBOOLEAN', B(o.typ !== 'innentuer')]], 'fc|' + key);
         }
       }
-      for (const r of GM.roomsWithMeta(g, f.raeume || [])) {
+      const rms = GM.roomsWithMeta(g, f.raeume || []);
+      // Raumtrennung ohne Wand (offener Übergang): Raumtool 3D trennt Räume nur an Wänden (IfcVirtualElement wird ignoriert,
+      // Wände < 2 cm ebenso). Standard daher: 2-cm-Trennwand, 6 cm in die Nachbarwände verlängert (kostet je Raum ~0,04 m²).
+      if (opts.trennung !== 'aus') for (const w of g.waende) {
+        const a = N.get(w.a), b = N.get(w.b); if (!a || !b || !GM.isHilf(w)) continue;
+        const L0 = Math.hypot(b.x - a.x, b.y - a.y); if (L0 < 300) continue;
+        const nx = -(b.y - a.y) / L0, ny = (b.x - a.x) / L0, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const side = s => rms.findIndex(r => GM.inPoly([mx + nx * s, my + ny * s], r.kontur));
+        const r1 = side(40), r2 = side(-40); if (r1 < 0 || r2 < 0 || r1 === r2) continue;
+        const A = W([a.x, a.y]), Bp = W([b.x, b.y]), Lm = L0 / 1000, ux = (Bp[0] - A[0]) / Lm, uy = (Bp[1] - A[1]) / Lm, lp = LP(lpS, A[0], A[1], 0, ux, uy);
+        const axis = E(`IFCSHAPEREPRESENTATION(${ctx},'Axis','Curve2D',(${E(`IFCPOLYLINE((${P2(0, 0)},${P2(Lm, 0)}))`)}))`);
+        const nm = S('Raumtrennung ' + rms[r1].name + ' / ' + rms[r2].name);
+        if (opts.trennung !== 'virtuell') {
+          const d = (opts.trennDicke || 20) / 1000, u = (opts.trennUeberstand == null ? 60 : opts.trennUeberstand) / 1000, el = E(`IFCWALLSTANDARDCASE(${G('vt|' + f.id + '|' + w.id)},${oh},${nm},$,${S('Virtuelle Wand')},${lp},${SH(EX([[-u, -d / 2], [Lm + u, -d / 2], [Lm + u, d / 2], [-u, d / 2]], H / 1000, 0), axis)},$)`);
+          els.push(el); const mu = matOf(Math.round(d * 1000), 'POSITIVE', -d * 500); if (!matRel.has(mu)) matRel.set(mu, []); matRel.get(mu).push(el);
+          PS(el, 'Pset_WallCommon', [['IsExternal', 'IFCBOOLEAN', B(false)], ['LoadBearing', 'IFCBOOLEAN', B(false)]], 'vc|' + f.id + '|' + w.id);
+        } else {
+          els.push(E(`IFCVIRTUALELEMENT(${G('vt|' + f.id + '|' + w.id)},${oh},${nm},$,$,${lp},${E(`IFCPRODUCTDEFINITIONSHAPE($,$,(${axis}))`)},$)`));
+        }
+      }
+      for (const r of rms) {
         raumNr++; const q = ccw(r.kontur.map(W)), key = f.id + '|' + raumNr;
         const s = E(`IFCSPACE(${G('sp|' + f.id + '|' + (r.bestandsaufnahmeId || r.mitte.join(',')))},${oh},${S(String(raumNr).padStart(2, '0'))},${S(r.nutzung || '')},$,${LP(lpS, 0, 0, 0)},${SH(EX(q, lichte / 1000, 0))},${S(r.name + (r.beheizt === 'nein' ? ' (unbeheizt)' : r.temp != null ? ' (' + String(r.temp).replace('.', ',') + ' °C)' : ''))},.ELEMENT.,.INTERNAL.,$)`);
         sp.push(s);

@@ -26,6 +26,10 @@ function check(f, strict) {
   g = GM.edit.addWall(g, [0, 3000], [7000, 3000], { t: 115 }); g = GM.edit.addWall(g, [7000, 0], [7000, 5000], { t: 240 }); // Kreuzungen
   check({ name: 'Testhaus', ...g }, true);
 }
+{ const o = require('./core.test.js').offen, f = x => exportIFC({ id: 't', geschosse: [o] }, x), n = (t, re) => (t.match(re) || []).length;
+  assert.strictEqual(n(f(), /'Raumtrennung Essen \/ Wohnen',\$,'Virtuelle Wand'/g), 1, 'Trennwand für offenen Übergang fehlt');
+  assert.strictEqual(n(f({ trennung: 'virtuell' }), /IFCVIRTUALELEMENT/g), 1); assert.strictEqual(n(f({ trennung: 'aus' }), /Raumtrennung/g), 0);
+  console.log('ok  Offener Übergang: Trennwand 2 cm im IFC'); }
 { const q = require('./core.test.js').querwand; check({ ...q, name: 'Querwände (OG-Typ)' }, true); }
 console.log('Beispiel-EFH 1978 (Altdaten: Bad und Wohnen überlappen diagonal):');
 for (const f of model.geschosse) check(f, f.name === 'KG');
