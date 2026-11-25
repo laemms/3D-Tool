@@ -167,8 +167,8 @@
         PS(s, 'Gebaeudemodell', [['Raumnummer', 'IFCINTEGER', raumNr], ['Flaeche', 'IFCAREAMEASURE', R(Math.round(r.flaeche_m2 * 100) / 100)], ['LichteHoehe', 'IFCLENGTHMEASURE', M(r.hoehe_mm || lichte)], ['Beheizt', 'IFCBOOLEAN', B(r.beheizt !== 'nein')]], 'gm|' + key);
       }
       // Rohdecke über dem Geschoss (bzw. oberste Geschossdecke) und Bodenplatte unter dem untersten Geschoss
-      const um = f.umriss || GM.umriss(g), rd = f.rohdecke_mm;
-      if (um.length >= 3 && rd > 20) {
+      const UMS = f.umriss ? [f.umriss] : GM.umrisse(g), um = UMS[0] || [], rd = f.rohdecke_mm;
+      if (um.length >= 3 && rd > 20) UMS.forEach((um, ui) => {
         /* Kehlbalkenlage im ausgebauten Dach: nur der Teil, über dem die Dachunterseite höher als die Decke liegt (Grundriss mit den
            Dachebenen beschnitten – Raumtool 3D übernimmt IfcBooleanClippingResult bei Decken nicht, Test 25.11.2026) */
         const cut = (poly, a, b, c) => { const out = []; poly.forEach((p0, i) => { const p1 = poly[(i + 1) % poly.length], v0 = a * p0[0] + b * p0[1] + c, v1 = a * p1[0] + b * p1[1] + c; if (v0 >= 0) out.push(p0); if ((v0 >= 0) !== (v1 >= 0)) { const t = v0 / (v0 - v1); out.push([p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t]); } }); return out; };
@@ -183,14 +183,13 @@
         const kA = umK.length >= 3 ? Math.abs(umK.reduce((s2, c, i) => { const d = umK[(i + 1) % umK.length]; return s2 + c[0] * d[1] - d[0] * c[1]; }, 0)) / 2e6 : 0;
         if (kA <= 0.5) return; const sk = pi ? '|' + pi : '';
         const q = ccw(umK.map(W)), db = EX(q, rd / 1000, (H - (f.fussboden_mm || 0) - rd) / 1000), dt = null; /* Unterkante = lichte Höhe + Abhängung über OKFF */
-        const sl = E(`IFCSLAB(${G('sl|' + f.id + sk)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(db, null, dt)},$,.FLOOR.)`);
-        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id + sk);
+        const sl = E(`IFCSLAB(${G('sl|' + f.id + (ui ? '|u' + ui : '') + sk)},${oh},${S((fi === fs.length - 1 ? 'Oberste Geschossdecke ' : 'Decke über ' + (f.name || 'Geschoss') + ' ') + CM(rd) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(db, null, dt)},$,.FLOOR.)`);
+        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(fi === fs.length - 1)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'slc|' + f.id + (ui ? '|u' + ui : '') + sk);
         });
-      }
-      if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) {
-        const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + f.id)},${oh},${S('Bodenplatte ' + CM(bp) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);
-        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'bpc|' + f.id);
-      }
+      });
+      if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) UMS.forEach((um, ui) => { const k = f.id + (ui ? '|u' + ui : '');
+        const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + k)},${oh},${S('Bodenplatte ' + CM(bp) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);
+        els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'bpc|' + k); });
       // Dach mit Giebel- und Kniestockwänden auf dem obersten Geschoss
       if (DA && DA.geschoss === f.id) {
         const toI = c => [c[0] / 1000, -c[1] / 1000, (c[2] - elev[fi]) / 1000], parts = [];

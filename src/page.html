@@ -392,7 +392,7 @@ function fit() {
   (f ? f.g.knoten : []).forEach(n => { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); });
   if (x1 < x0) { x0 = 0; y0 = 0; x1 = 10000; y1 = 8000; }
   // freie Fläche zwischen den schwebenden Leisten
-  const { L, T, R, B } = freeRect(W, H), pad = 600, k = Math.min((R - L) / (x1 - x0 + 2 * pad), (B - T) / (y1 - y0 + 2 * pad)); st.vw = { k, ox: L + (R - L - (x1 - x0) * k) / 2 - x0 * k, oy: T + (B - T - (y1 - y0) * k) / 2 - y0 * k };
+  const fr = freeRect(W, H), L = fr.L + 36, T = fr.T + 36, R = fr.R, B = fr.B, pad /* Platz für die Maßketten oben und links */ = 600, k = Math.min((R - L) / (x1 - x0 + 2 * pad), (B - T) / (y1 - y0 + 2 * pad)); st.vw = { k, ox: L + (R - L - (x1 - x0) * k) / 2 - x0 * k, oy: T + (B - T - (y1 - y0) * k) / 2 - y0 * k };
 }
 function zoomAt(fac, sx, sy) { const v = st.vw; const k2 = Math.max(0.005, Math.min(2, v.k * fac)); v.ox = sx - (sx - v.ox) * k2 / v.k; v.oy = sy - (sy - v.oy) * k2 / v.k; v.k = k2; draw2d(); }
 const toW = e => { const r = $('plan').getBoundingClientRect(), v = st.vw; return [(e.clientX - r.left - v.ox) / v.k, (e.clientY - r.top - v.oy) / v.k]; };
@@ -479,6 +479,19 @@ function draw2d() {
   g.waende.forEach(w => { const a = toS([N.get(w.a).x, N.get(w.a).y]), b = toS([N.get(w.b).x, N.get(w.b).y]); s += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="var(--axis)" stroke-width="1" stroke-dasharray="3 3"/>`; });
   if (st.tool === 'sel') g.knoten.forEach(n => { const c = toS(st.drag && st.drag.id === n.id ? st.drag.p : [n.x, n.y]); s += `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${st.drag && st.drag.id === n.id ? 6 : 3}" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>`; });
   if (st.drag && st.drag.moved) { const n0 = N.get(st.drag.id); g.waende.filter(w => w.a === n0.id || w.b === n0.id).forEach(w => { const o = w.a === n0.id ? N.get(w.b) : N.get(w.a), a = toS(st.drag.p), b = toS([o.x, o.y]); s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--sel)" stroke-width="2"/>`; }); }
+  // Maße: Außenmaße des Geschosses oben und links, Länge der gewählten Wand (Taste M blendet sie aus)
+  if (st.masse !== false) { const pts = GM.umrisse(g).flat(); if (pts.length) {
+    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), A = toS([x0, y0]), B = toS([x1, y1]), off = 26;
+    const dim = (p, q, txt, vert) => { const [a, b] = [p, q]; let o = `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="var(--mute)" stroke-width="1"/>`;
+      [a, b].forEach(c => { o += vert ? `<line x1="${(c[0] - 5).toFixed(1)}" y1="${c[1].toFixed(1)}" x2="${(c[0] + 5).toFixed(1)}" y2="${c[1].toFixed(1)}" stroke="var(--mute)" stroke-width="1"/>` : `<line x1="${c[0].toFixed(1)}" y1="${(c[1] - 5).toFixed(1)}" x2="${c[0].toFixed(1)}" y2="${(c[1] + 5).toFixed(1)}" stroke="var(--mute)" stroke-width="1"/>`; });
+      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; o += vert ? `<text x="${(mx - 8).toFixed(1)}" y="${my.toFixed(1)}" font-size="12" fill="var(--mute)" text-anchor="middle" transform="rotate(-90 ${(mx - 8).toFixed(1)} ${my.toFixed(1)})" style="font-variant-numeric:tabular-nums">${txt}</text>` : `<text x="${mx.toFixed(1)}" y="${(my - 8).toFixed(1)}" font-size="12" fill="var(--mute)" text-anchor="middle" style="font-variant-numeric:tabular-nums">${txt}</text>`; return o; };
+    if (B[0] - A[0] > 60) s += dim([A[0], A[1] - off], [B[0], A[1] - off], nf((x1 - x0) / 1000) + ' m', false);
+    if (B[1] - A[1] > 60) s += dim([A[0] - off, A[1]], [A[0] - off, B[1]], nf((y1 - y0) / 1000) + ' m', true);
+    if (sel && sel.kind === 'wall') { const w = g.waende.find(x => x.id === sel.id); if (w) { const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], S = [-u[1], u[0]], ts = w.ts == null ? w.t / 2 : w.ts;
+      const mid = [(a.x + b.x) / 2, (a.y + b.y) / 2], innen = q => rooms.some(r => GM.inPoly(q, r.kontur)), aus = !innen([mid[0] + S[0] * (ts + 300), mid[1] + S[1] * (ts + 300)]);
+      const sh = aus ? ts + 18 / st.vw.k : ts - w.t - 18 / st.vw.k, P0 = toS([a.x + S[0] * sh, a.y + S[1] * sh]), P1 = toS([b.x + S[0] * sh, b.y + S[1] * sh]), ang = Math.atan2(P1[1] - P0[1], P1[0] - P0[0]) * 180 / Math.PI, fl = Math.abs(ang) > 90, mx = (P0[0] + P1[0]) / 2, my = (P0[1] + P1[1]) / 2;
+      s += `<line x1="${P0[0].toFixed(1)}" y1="${P0[1].toFixed(1)}" x2="${P1[0].toFixed(1)}" y2="${P1[1].toFixed(1)}" stroke="var(--accent)" stroke-width="1.2"/><circle cx="${P0[0].toFixed(1)}" cy="${P0[1].toFixed(1)}" r="2.5" fill="var(--accent)"/><circle cx="${P1[0].toFixed(1)}" cy="${P1[1].toFixed(1)}" r="2.5" fill="var(--accent)"/>`;
+      s += `<text x="${mx.toFixed(1)}" y="${my.toFixed(1)}" dy="${fl ? 15 : -6}" font-size="12.5" font-weight="650" fill="var(--accent)" text-anchor="middle" transform="rotate(${(fl ? ang + 180 : ang).toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)})" style="font-variant-numeric:tabular-nums;paint-order:stroke" stroke="var(--paper)" stroke-width="3">${nf(L / 1000)} m</text>`; } } } }
   if (st.dach && (st.dach.fenster || []).length) { const doc = modelDoc(), DA = GM.dach(doc, st.dach); // Dachfenster als Projektion im obersten Geschoss
     if (DA && DA.geschoss === f.id) { const o = GM.stapeln(doc.geschosse.map(x => ({ id: x.id, name: x.name, lageFrei: x.lageFrei, g: x })))[f.id] || { dx: 0, dy: 0 };
       DA.fenster.forEach(w => { s += `<polygon points="${P(w.ecken.map(c => [c[0] - o.dx, c[1] - o.dy]))}" fill="color-mix(in srgb,var(--win) 14%,transparent)" stroke="var(--win)" stroke-width="1.5" stroke-dasharray="5 3"/>`; }); } }
@@ -552,7 +565,7 @@ function renderProps() {
     $('p-n').onchange = e => upd({ name: e.target.value.trim() || r.name }); $('p-u').onchange = e => upd({ nutzung: e.target.value.trim() }); $('p-temp').onchange = e => upd({ temp: num(e.target.value) }); }
 }
 function updButtons() { $('undo').disabled = !st.undo.length; $('redo').disabled = !st.redo.length; }
-function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht das Modell, Mausrad zoomt. Tasten: 1 2 3 Ansicht, F Gesamtansicht' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt klicken oder Länge eingeben und Richtung wählen, Esc beendet die Wand' : 'Ersten Punkt der Wand klicken') : st.tool === 'open' ? 'Wand anklicken, um Fenster oder Tür zu setzen' : 'Ziehen verschiebt den Plan, Mausrad zoomt. Tasten: V Auswahl, W Wand, O Öffnung, 1 2 3 Ansicht, Bild↑ Bild↓ Geschoss'; }
+function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht das Modell, Mausrad zoomt' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt klicken oder Länge eingeben und Richtung wählen, Esc beendet die Wand' : 'Ersten Punkt der Wand klicken') : st.tool === 'open' ? 'Wand anklicken, um Fenster oder Tür zu setzen' : 'Ziehen verschiebt den Plan, Mausrad zoomt, M blendet die Maße aus'; }
 /* Seitenleiste: Register, ein-/ausblenden; neue Auswahl im Plan öffnet das Register „Auswahl“ */
 function setTab(t) { st.tab = t; document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t)); document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t; }); if (t === 'datei') renderNacharbeit(); if (t === 'dach') renderDachfenster(); }
 function selKey(x) { return x ? x.kind + ':' + (x.id || (x.mitte || []).join(',')) : ''; }
@@ -634,7 +647,7 @@ async function draw3d() {
       let c = 0; for (const o of ops) { piece(w, c, o.s0, 0, Hw, m); piece(w, o.s0, o.s1, 0, o.brh, m); piece(w, o.s0, o.s1, o.brh + o.hoehe, Hw, m); if (!/tuer/.test(o.typ || '') || o.typ === 'fenstertuer') piece(w, o.s0, o.s1, o.brh, o.brh + o.hoehe, mWin); c = o.s1; } piece(w, c, L, 0, Hw, m); }
     for (const c of GM.nodeCaps(g)) { const hc = cut ? Math.min(Hw, ...c.poly.map(q => cut(q[0], q[1]))) : Hw; if (hc < 5) continue; const geo = new T.ExtrudeGeometry(new T.Shape(c.poly.map(q => new T.Vector2(q[0], q[1]))), { depth: hc, bevelEnabled: false }), ms = new T.Mesh(geo, c.ext ? mExt : mIn); ms.rotation.x = Math.PI / 2; ms.position.y = hc; fg.add(ms); }
     for (const r of GM.roomsWithMeta(g, f.meta)) { const ms = new T.Mesh(new T.ShapeGeometry(new T.Shape(r.kontur.map(q => new T.Vector2(q[0], q[1])))), mFl); ms.rotation.x = Math.PI / 2; ms.position.y = 2; fg.add(ms); }
-    if (haus && D.rohdecke_mm > 0 && !cut) { const u = GM.umriss(g); if (u.length >= 3) { const ms = new T.Mesh(new T.ExtrudeGeometry(new T.Shape(u.map(q => new T.Vector2(q[0], q[1]))), { depth: D.rohdecke_mm, bevelEnabled: false }), mSlab); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; fg.add(ms); } }
+    if (haus && D.rohdecke_mm > 20 && !cut) GM.umrisse(g).forEach(u => { const ms = new T.Mesh(new T.ExtrudeGeometry(new T.Shape(u.map(q => new T.Vector2(q[0], q[1]))), { depth: D.rohdecke_mm, bevelEnabled: false }), mSlab); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; fg.add(ms); });
     g.knoten.forEach(n => { x0 = Math.min(x0, n.x + off.dx); x1 = Math.max(x1, n.x + off.dx); z0 = Math.min(z0, n.y + off.dy); z1 = Math.max(z1, n.y + off.dy); });
   }
   // Dach: ebene Platten aus 3D-Polygonen (Modell: x, y im Plan, z oben → three: x, y oben, z)
@@ -683,7 +696,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { if (st.chain) endChain(false); else { st.sel = null; refresh(); } return; }
   // Tastenkürzel für die Arbeit am PC: V Auswahl, W Wand, O Öffnung, 1/2/3 Ansicht, F ganzer Plan, Bild↑/↓ Geschoss, S Seitenleiste
   if (!inField && !e.ctrlKey && !e.metaKey && !e.altKey) { const k = e.key.toLowerCase(), fi = st.floors.findIndex(x => x.id === st.fid);
-    const act = { v: () => setTool('sel'), w: () => setTool('wall'), o: () => setTool('open'), 1: () => setView('2d'), 2: () => setView('3d'), 3: () => setView('haus'), f: () => (st.view === '2d' ? refresh(true) : draw3d()), s: () => $('panel-t').click(),
+    const act = { v: () => setTool('sel'), w: () => setTool('wall'), o: () => setTool('open'), 1: () => setView('2d'), 2: () => setView('3d'), 3: () => setView('haus'), f: () => (st.view === '2d' ? refresh(true) : draw3d()), s: () => $('panel-t').click(), m: () => { st.masse = st.masse === false; draw2d(); },
       pageup: () => fi < st.floors.length - 1 && selectFloor(st.floors[fi + 1].id), pagedown: () => fi > 0 && selectFloor(st.floors[fi - 1].id) }[k];
     if (act) { e.preventDefault(); act(); return; } }
   if ((e.key === 'Delete' || e.key === 'Backspace') && !inField && st.sel) { const s = st.sel; st.sel = null; if (s.kind === 'wall') change(g => GM.edit.deleteWall(g, s.id)); else if (s.kind === 'open') change(g => GM.edit.deleteOpening(g, s.id)); else refresh(); }

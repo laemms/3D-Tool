@@ -56,6 +56,8 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
   (Raumhöhe aus der Bestandsaufnahme), ist das die lichte Höhe, die Rohdecke liegt direkt darauf: Rohdecke = Geschosshöhe − Fußboden −
   lichte Höhe − Abhängung (Formel wie Raumtool 3D und Bestandsaufnahme). Unterschiedliche Raumhöhen: Geschosswerte, Prüfung meldet es;
   Rohdecke unter 10 cm: Warnung. Unterkante der Platte = OKFF + lichte Höhe + Abhängung.
+- Mehrere Außenumrisse (`GM.umrisse`): hängt ein Gebäudeteil nur an einer Ecke am Rest (Bad im Beispiel-EFH), bekommt es eigene
+  Decke, Bodenplatte und eigenes Dachteil. Maße im Grundriss: Außenmaße oben/links, Länge der gewählten Wand außen (Taste M).
 - Desktop first: Arbeit überwiegend am PC. Tastenkürzel V/W/O (Werkzeuge), 1/2/3 (Ansicht), F (ganzer Plan), Bild↑/↓ (Geschoss),
   S (Seitenleiste), Entf, Strg+Z/Y; Texte für Maus. Tablet bleibt nutzbar, wird aber nachrangig behandelt.
 - Nacharbeit in Raumtool (`GMIFC.nacharbeit`, `nacharbeitText`): Rohdecke je Geschoss, unbeheizte/abweichend temperierte Räume,

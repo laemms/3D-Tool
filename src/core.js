@@ -253,6 +253,10 @@
     const out = faces(g, true).filter(f => f.A < -1e3).sort((a, b) => a.A - b.A);
     return out.length ? innerContour(out[0], g).map(p => [Math.round(p[0]), Math.round(p[1])]) : [];
   }
+  /* alle Außenumrisse (mehrere, wenn Gebäudeteile nur an einer Ecke zusammenhängen, z. B. ein angesetztes Bad); größter zuerst */
+  function umrisse(g) {
+    return faces(g, true).filter(f => f.A < -1e6).sort((a, b) => a.A - b.A).map(f => innerContour(f, g).map(p => [Math.round(p[0]), Math.round(p[1])])).filter(u => u.length >= 3);
+  }
 
   /* Höhenmodell wie Bestandsaufnahme und Raumtool 3D (Werte in m):
      Geschosshöhe = Fußboden + lichte Höhe + Abhängung + Rohdecke; Niveau = OKFF bezogen auf ±0,00 (EG) */
@@ -389,14 +393,14 @@
     if (!d || d.form === 'kein') return null;
     const fs = (doc.geschosse || []).filter(f => (f.waende || []).some(w => !isHilf(w))); if (!fs.length) return null;
     const top = fs[fs.length - 1], stp = stapeln((doc.geschosse || []).map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })))[top.id] || { dx: 0, dy: 0 };
-    const u = umriss(top); if (u.length < 3) return null;
-    const us = u.map(q => [q[0] + stp.dx, q[1] + stp.dy]), xs = us.map(q => q[0]), ys = us.map(q => q[1]);
+    const U = umrisse(top); if (!U.length) return null;
+    const UU = U.map(u => u.map(q => [q[0] + stp.dx, q[1] + stp.dy])), us = UU[0], xs = UU.flat().map(q => q[0]), ys = UU.flat().map(q => q[1]);
     const H = top.geschossHoehe_mm || 2800, niv = top.niveau_mm || 0, zb = d.bezug === 'boden' ? niv : niv + H, ze = zb + (Number(d.kniestock) || 0);
     const t = Math.tan(Math.max(0, Math.min(75, Number(d.neigung) || 0)) * Math.PI / 180), ut = Number(d.ueberTraufe) || 0, uo = Number(d.ueberOrtgang) || 0;
     const tw = Math.max(...top.waende.filter(w => w.ext && !isHilf(w)).map(w => w.t), 240), dk = Number(d.dicke) || 250;
     const walm = d.form === 'walm' || d.form === 'zelt';
     // Dachteile: ein Rechteck über alles (wie bisher) oder Zerlegung des Umrisses (L-, T-, U-Grundriss)
-    let rects = d.teileModus === 'rechteck' ? [] : dachTeile(us);
+    let rects = d.teileModus === 'rechteck' ? [] : UU.flatMap(u => dachTeile(u));
     if (rects.length < 2 || d.form === 'flach') rects = [{ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }];
     const teile = [], E = 50;
     rects.forEach((r, i) => { const lx = r.x1 - r.x0, ly = r.y1 - r.y0; let alongX, innen = null, nb = null;
@@ -528,6 +532,6 @@
     // mehrere Dachteile: höchste Unterseite der Teile, die den Punkt überdecken (Kehlen = Maximum)
     const z = DA.teile.filter(T => x >= T.fp[0] - 1 && x <= T.fp[2] + 1 && y >= T.fp[1] - 1 && y <= T.fp[3] + 1).map(T => Math.min(...T.ebenen.map(e => e.a * x + e.b * y + e.c - e.dz)));
     return z.length ? Math.max(...z) : Infinity; }
-  const api = { dachFlaechenListe, dachTeile, dachUnten, dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  const api = { umrisse, dachFlaechenListe, dachTeile, dachUnten, dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
