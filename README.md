@@ -68,6 +68,9 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
     Die Kehlbalkenlage wird deshalb als beschnittener Grundriss exportiert. Raumtool legt je Geschoss zusätzlich eine eigene
     Decke (25 cm) an; im ausgebauten Dach ragt sie in der 3D-Ansicht durchs Dach.
   - Prüfung meldet Fenster/Türen, die in die Dachschräge reichen (im Raumtool als Dachfenster anlegen).
+  - Dachflächenfenster (`dach.fenster`: Fläche, Mitte, Unterkante, Breite, Höhe) gehen IFC-konform als IfcOpeningElement in der
+    Dachplatte + IfcWindow raus. Raumtool 3D übernimmt sie nicht als Dachfenster („Fehlgeschlagen mit Ersatz“ → 3D-Objekt), auch
+    nicht mit Platzierung relativ zur Dachplatte. Dachfenster und Gauben deshalb in Raumtool von Hand anlegen; kein Editor dafür.
 - Prüfung im Gebäudemodell (`GMIFC.pruefen`): Wandüberschneidungen, Öffnungen über der Wand oder übereinander,
   Räume gegen die Bestandsaufnahme, Geschosse mit anderen Außenmaßen. Eintrag antippen wählt das Bauteil.
   Öffnungen werden beim Laden in den Wandkörper gerückt (`GMIFC.einruecken`). Zwei Finger zoomen (2D und 3D).

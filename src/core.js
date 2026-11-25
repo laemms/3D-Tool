@@ -397,7 +397,17 @@
     const ebenen = flaechen.map(f => { const [p0, p1] = f, p2 = f.find((q, i) => i > 1 && Math.abs((p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0])) > 1);
       const det = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]), a = ((p1[2] - p0[2]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[2] - p0[2])) / det, b = ((p1[0] - p0[0]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[0] - p0[0])) / det;
       return { a, b, c: p0[2] - a * p0[0] - b * p0[1], dz: dk * Math.hypot(1, a, b) }; });
-    return { form: d.form, bezug: d.bezug === 'boden' ? 'boden' : 'decke', ebenen, geschoss: top.id, dicke: dk, wanddicke: tw, flaechen: flaechen.map(f => f.map(R)), waende: wl.map(w => ({ name: w.name, pts: w.pts.map(R) })), firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
+    /* Dachflächenfenster: auf Fläche k, Mitte längs der Traufe (ab erster Traufecke), Unterkante über Rohfußboden des obersten
+       Geschosses (an der Dachunterseite gemessen), Breite × Höhe (Höhe entlang der Schräge) */
+    const fenster = d.form === 'flach' ? [] : (d.fenster || []).map((w, i) => { const k = w.flaeche | 0, q = flaechen[k], Eb = ebenen[k]; if (!q || !Eb) return null;
+      const p0 = q[0], p1 = q[1], L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); if (L < 1) return null;
+      const e = [(p1[0] - p0[0]) / L, (p1[1] - p0[1]) / L, 0]; let hd = [-e[1], e[0]]; if (Eb.a * hd[0] + Eb.b * hd[1] < 0) hd = [-hd[0], -hd[1]];
+      const sl = Eb.a * hd[0] + Eb.b * hd[1]; if (sl < 0.02) return null; const ca = 1 / Math.hypot(1, sl), uu = [hd[0] * ca, hd[1] * ca, sl * ca];
+      const B = Number(w.breite) || 780, Hh = Number(w.hoehe) || 1180, zTop = niv + (w.unterkante == null ? 1000 : Number(w.unterkante)) + Eb.dz, t0 = (zTop - p0[2]) / uu[2], m = w.mitte == null ? L / 2 : Number(w.mitte);
+      const at = (sx, tx) => [p0[0] + e[0] * sx + uu[0] * tx, p0[1] + e[1] * sx + uu[1] * tx, p0[2] + uu[2] * tx];
+      let n = [e[1] * uu[2] - e[2] * uu[1], e[2] * uu[0] - e[0] * uu[2], e[0] * uu[1] - e[1] * uu[0]]; if (n[2] < 0) n = n.map(v => -v);
+      return { id: w.id || 'df' + (i + 1), flaeche: k, breite: B, hoehe: Hh, e, u: uu, n, ecken: [at(m - B / 2, t0), at(m + B / 2, t0), at(m + B / 2, t0 + Hh), at(m - B / 2, t0 + Hh)], laenge: L }; }).filter(Boolean);
+    return { form: d.form, bezug: d.bezug === 'boden' ? 'boden' : 'decke', ebenen, fenster, geschoss: top.id, dicke: dk, wanddicke: tw, flaechen: flaechen.map(f => f.map(R)), waende: wl.map(w => ({ name: w.name, pts: w.pts.map(R) })), firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
   }
 
   /* Höhe der Dachunterseite über ±0 an einem Punkt (mm, Modellkoordinaten); Infinity ohne Dach */

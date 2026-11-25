@@ -113,5 +113,10 @@ assert.strictEqual(exportIFC(model, { zeit: Date.UTC(2026, 10, 25), bearbeiter: 
     // Kehlbalkenlage nur dort, wo das Dach höher liegt
     const t = exportIFC(mk('boden')), sl = /IFCSLAB\('[^']*',#\d+,'Oberste Geschossdecke/.test(t), tw = exportIFC({ ...mk('boden'), dach: { ...mk('boden').dach, neigung: 15 } });
     assert.ok(sl && !/'Oberste Geschossdecke/.test(tw), 'Kehlbalkenlage: flaches Dach darf keine Decke haben');
-    console.log('ok  Ausgebautes Dach: Fenster in der Schräge gemeldet, Kehlbalkenlage beschnitten'); } console.log('IFC geprüft');
+    console.log('ok  Ausgebautes Dach: Fenster in der Schräge gemeldet, Kehlbalkenlage beschnitten');
+    // Dachflächenfenster: Öffnung in der Dachplatte, Fenster liegt in der Dachfläche
+    const dd = mk('boden'); dd.dach.fenster = [{ flaeche: 0, unterkante: 1000, breite: 780, hoehe: 1180 }]; const DA = GM.dach(dd, dd.dach), w = DA.fenster[0];
+    assert.ok(w && Math.abs(Math.hypot(...[0, 1, 2].map(i => w.ecken[3][i] - w.ecken[0][i])) - 1180) < 1 && Math.abs(w.ecken[0][2] - (1000 + DA.ebenen[0].dz)) < 1, 'Dachfenster-Geometrie');
+    const td = exportIFC(dd); assert.ok(/IFCWINDOW\('[^']*',#\d+,'Dachfenster'/.test(td) && /IFCOPENINGELEMENT\('[^']*',#\d+,'\\X2\\00D6\\X0\\ffnung Dachfenster'/.test(td), 'Dachfenster im IFC');
+    console.log('ok  Dachflächenfenster: Öffnung in der Dachplatte'); } console.log('IFC geprüft');
 })().catch(e => { console.error(e); process.exit(1); });
