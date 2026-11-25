@@ -168,7 +168,7 @@ function fillProjects(keep) {
 const fromBA = p => GM.floorsFromBA(p);
 function selectProject(pid) {
   st.pid = pid; $('proj').value = pid; const p = st.projects[pid], m = st.models[pid];
-  st.dach = { ...GM.dachStandard(p), ...((m && m.dach) || {}) };
+  st.dach = m && m.dach && m.dach.gesetzt ? { ...GM.dachStandard(p), ...m.dach } : GM.dachStandard(p); // nur selbst eingestellte Dächer bleiben, sonst Vorgabe aus der Bestandsaufnahme
   if (m && m.version >= MODEL_VERSION) st.floors = GM.floorsFromSaved(p, m);
   else { st.floors = fromBA(p); st.dirty = !!st.db || !!st.local; }
   const fs = st.floors.filter(f => f.g.waende.length);
@@ -360,7 +360,7 @@ function draw2d() {
 const DF = [['d-form', 'form'], ['d-neig', 'neigung', 1], ['d-first', 'first'], ['d-knie', 'kniestock', 10], ['d-ut', 'ueberTraufe', 10], ['d-uo', 'ueberOrtgang', 10], ['d-dicke', 'dicke', 10], ['d-bezug', 'bezug']];
 function renderDach() { const d = st.dach || {}; for (const [id, k, f] of DF) { const el = $(id); if (document.activeElement === el) continue; el.value = f ? String(Math.round((d[k] || 0) / f * 10) / 10).replace('.', ',') : d[k]; }
   const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). Grundriss: Außenumriss als Rechteck.' : 'Kein Dach im Modell.'; }
-for (const [id, k, f] of DF) $(id).addEventListener('change', e => { const v = f ? num(e.target.value) : e.target.value; if (f && (v == null || v < 0)) { renderDach(); return; } st.dach = { ...st.dach, [k]: f ? Math.round(v * f) : v }; st.dirty = true; scheduleSave(); renderDach(); if (st.view === 'haus') draw3d(); });
+for (const [id, k, f] of DF) $(id).addEventListener('change', e => { const v = f ? num(e.target.value) : e.target.value; if (f && (v == null || v < 0)) { renderDach(); return; } st.dach = { ...st.dach, [k]: f ? Math.round(v * f) : v, gesetzt: true }; st.dirty = true; scheduleSave(); renderDach(); if (st.view === 'haus') draw3d(); });
 function renderRooms() {
   const f = fl(); if (!f) return; const rs = GM.roomsWithMeta(f.g, f.meta), sum = rs.reduce((a, r) => a + r.flaeche_m2, 0);
   $('rooms').innerHTML = rs.length ? `<table><thead><tr><th>Raum</th><th class="r">m²</th><th class="r">Bestand m²</th></tr></thead><tbody>${rs.map(r => { const m = f.meta.find(x => x.bestandsaufnahmeId && x.bestandsaufnahmeId === r.bestandsaufnahmeId), on = st.sel && st.sel.kind === 'room' && GM.inPoly(st.sel.mitte, r.kontur); return `<tr class="${on ? 'on' : ''}"><td>${esc(r.name)}</td><td class="r">${nf(r.flaeche_m2)}</td><td class="r">${m && m.soll != null ? nf(m.soll) : '–'}</td></tr>`; }).join('')}<tr><td><b>Summe</b></td><td class="r"><b>${nf(sum)}</b></td><td></td></tr></tbody></table>` : '<p class="small">Noch keine geschlossenen Räume. Mit „Wand“ eine Kontur zeichnen.</p>';

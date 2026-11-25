@@ -134,6 +134,7 @@ t('Dach: Satteldach auf der obersten Geschossdecke, First über der Mitte', () =
   const r = GM.dach(doc, d); assert.strictEqual(r.traufhoehe, 3300); assert.strictEqual(r.firsthoehe, 3300 + 4365); assert.strictEqual(r.flaechen.length, 2);
   assert.deepStrictEqual(r.waende.map(w => w.name), ['Kniestock', 'Kniestock', 'Giebelwand', 'Giebelwand']); assert.strictEqual(GM.dach(doc, { ...d, form: 'kein' }), null);
   assert.strictEqual(GM.dach(doc, { ...d, form: 'pult' }).flaechen.length, 1); assert.strictEqual(GM.dachStandard({ geschosse: [{ name: 'DG', raeume: [{}] }] }).bezug, 'boden');
+  assert.strictEqual(GM.dachStandard({ geschosse: [{ name: 'EG', raeume: [{ decke: { grenzt: 'raum' } }, { decke: { grenzt: 'raum' } }] }] }).form, 'kein');
 });
 console.log('Bearbeiten geprüft');
 

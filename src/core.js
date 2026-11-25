@@ -344,7 +344,9 @@
      Ergebnis in mm, Modellkoordinaten (x rechts, y unten im Plan, z nach oben ab ±0): Dachflächen (Oberseite) und Giebel-/Kniestockwände. */
   function dachStandard(p) { const top = (p.geschosse || []).slice().reverse().find(f => (f.raeume || []).length) || {};
     const dg = (top.raeume || []).some(r => r.decke && r.decke.grenzt === 'aussen') || /^(dg|dach)/i.test(top.name || '');
-    return { form: 'sattel', neigung: Number((p.objekt || {}).dachneigung) || 35, first: 'lang', kniestock: 0, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: dg ? 'boden' : 'decke' }; }
+    // über allen Räumen liegt laut Bestandsaufnahme ein beheizter Raum (z. B. Wohnung im Mehrfamilienhaus): kein Dach im Modell
+    const oben = (top.raeume || []).length && (top.raeume || []).every(r => r.decke && r.decke.grenzt === 'raum');
+    return { form: oben ? 'kein' : 'sattel', neigung: Number((p.objekt || {}).dachneigung) || 35, first: 'lang', kniestock: 0, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: dg ? 'boden' : 'decke' }; }
   function dach(doc, d) {
     if (!d || d.form === 'kein') return null;
     const fs = (doc.geschosse || []).filter(f => (f.waende || []).some(w => !isHilf(w))); if (!fs.length) return null;
