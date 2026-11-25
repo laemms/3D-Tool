@@ -127,6 +127,14 @@ t('Geschosse übereinander: gleiche Außenmaße mittig auf das EG, abweichende b
   assert.deepStrictEqual([s.kg.dx, s.kg.dy, s.kg.st], [1000, 3000, 'gleich']); assert.strictEqual(s.eg.st, 'bezug'); assert.deepStrictEqual([s.og.dx, s.og.dy], [1975, 5975]);
   assert.deepStrictEqual([s.dg.dx, s.dg.st], [0, 'abw']); assert.strictEqual(s.x.st, 'frei');
 });
+t('Dach: Satteldach auf der obersten Geschossdecke, First über der Mitte', () => {
+  let g = { knoten: [], waende: [], oeffnungen: [] }; const A = { t: 365, ts: 0, ext: true };
+  g = GM.edit.addWall(g, [0, 0], [10000, 0], A); g = GM.edit.addWall(g, [10000, 0], [10000, 8000], A); g = GM.edit.addWall(g, [10000, 8000], [0, 8000], A); g = GM.edit.addWall(g, [0, 8000], [0, 0], A);
+  const doc = { geschosse: [{ id: 'eg', name: 'EG', ...g, niveau_mm: 0, geschossHoehe_mm: 2800 }] }, d = { form: 'sattel', neigung: 45, first: 'lang', kniestock: 500, ueberTraufe: 0, ueberOrtgang: 0, dicke: 200, bezug: 'decke' };
+  const r = GM.dach(doc, d); assert.strictEqual(r.traufhoehe, 3300); assert.strictEqual(r.firsthoehe, 3300 + 4365); assert.strictEqual(r.flaechen.length, 2);
+  assert.deepStrictEqual(r.waende.map(w => w.name), ['Kniestock', 'Kniestock', 'Giebelwand', 'Giebelwand']); assert.strictEqual(GM.dach(doc, { ...d, form: 'kein' }), null);
+  assert.strictEqual(GM.dach(doc, { ...d, form: 'pult' }).flaechen.length, 1); assert.strictEqual(GM.dachStandard({ geschosse: [{ name: 'DG', raeume: [{}] }] }).bezug, 'boden');
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----

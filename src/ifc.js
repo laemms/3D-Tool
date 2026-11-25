@@ -88,6 +88,13 @@
     let raumNr = 0;
     // Geschosse übereinander stellen (wie die Bestandsaufnahme beim IFC- und DXF-Export)
     const stp = opts.stapeln === false ? {} : GM.stapeln(fs.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: { knoten: f.knoten || [], waende: f.waende || [] } })));
+    const DA = model.dach ? GM.dach(model, model.dach) : null;
+    // ebener Körper aus einem 3D-Polygon (IFC-Koordinaten, m): Profil in der Ebene (X, Y = Z × X), extrudiert entlang −Z um depth
+    const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], nrm = a => { const l = Math.hypot(...a) || 1; return a.map(v => v / l); };
+    const PLATE = (rel, q, X, Z, depth) => { const O = q[0], Y = crs(Z, X), pr = q.map(c => { const d = sub3(c, O); return [dot3(d, X), dot3(d, Y)]; });
+      const pl = E(`IFCLOCALPLACEMENT(${rel},${E(`IFCAXIS2PLACEMENT3D(${P3(O[0], O[1], O[2])},${D3(...Z)},${D3(...X)})`)})`);
+      const body = E(`IFCEXTRUDEDAREASOLID(${E(`IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,${poly2(ccw(pr))})`)},${E(`IFCAXIS2PLACEMENT3D(${P3(0, 0, 0)},${zd},${xd})`)},${D3(0, 0, -1)},${R(depth)})`);
+      return [pl, SH(body)]; };
     fs.forEach((f, fi) => {
       OFF = stp[f.id] ? [stp[f.id].dx, stp[f.id].dy] : [0, 0];
       const g = { knoten: f.knoten || [], waende: f.waende || [], oeffnungen: f.oeffnungen || [] }, N = new Map(g.knoten.map(k => [k.id, k])), H = f.geschossHoehe_mm || 2800, lichte = f.lichteHoehe_mm || H - 300;
@@ -153,6 +160,20 @@
       if (fi === 0 && um.length >= 3 && model.bodenplatte_mm > 0) {
         const q = ccw(um.map(W)), bp = model.bodenplatte_mm, fb = f.fussboden_mm || 0, sl = E(`IFCSLAB(${G('bp|' + f.id)},${oh},${S('Bodenplatte ' + CM(bp) + ' cm')},$,$,${LP(lpS, 0, 0, 0)},${SH(EX(q, bp / 1000, -(fb + bp) / 1000))},$,.BASESLAB.)`);
         els.push(sl); PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'bpc|' + f.id);
+      }
+      // Dach mit Giebel- und Kniestockwänden auf dem obersten Geschoss
+      if (DA && DA.geschoss === f.id) {
+        const toI = c => [c[0] / 1000, -c[1] / 1000, (c[2] - elev[fi]) / 1000], parts = [];
+        DA.flaechen.forEach((q0, k) => { const q = q0.map(toI), X = nrm(sub3(q[1], q[0])); let Z = nrm(crs(X, sub3(q[q.length - 1], q[0]))); if (Z[2] < 0) Z = Z.map(v => -v);
+          const [pl, sh] = PLATE(lpS, q, X, Z, DA.dicke / 1000), sl = E(`IFCSLAB(${G('df|' + f.id + '|' + k)},${oh},${S('Dachfläche ' + (k + 1))},$,$,${pl},${sh},$,.ROOF.)`); parts.push(sl);
+          PS(sl, 'Pset_SlabCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['PitchAngle', 'IFCPLANEANGLEMEASURE', R(Math.acos(Math.min(1, Z[2])))]], 'dfc|' + f.id + '|' + k); });
+        const roof = E(`IFCROOF(${G('roof|' + f.id)},${oh},${S('Dach')},$,$,${LP(lpS, 0, 0, 0)},$,$,.${{ sattel: 'GABLE_ROOF', pult: 'SHED_ROOF', flach: 'FLAT_ROOF' }[DA.form] || 'NOTDEFINED'}.)`);
+        AG(roof, parts, 'roof|' + f.id); els.push(roof);
+        const allp = DA.waende.flatMap(w => w.pts), mid = allp.reduce((a, c) => [a[0] + c[0], a[1] + c[1]], [0, 0]).map(v => v / Math.max(1, allp.length));
+        DA.waende.forEach((dw, k) => { const q = dw.pts.map(toI), up = [0, 0, 1], e = nrm(sub3(q[1], q[0])), c = toI([mid[0], mid[1], 0]); let n = nrm([-e[1], e[0], 0]); if (dot3(n, sub3(c, q[0])) < 0) n = n.map(v => -v);
+          const X = crs(up, n), [pl, sh] = PLATE(lpS, q, X, n.map(v => -v), DA.wanddicke / 1000); // Profil in der Außenfläche, Dicke nach innen
+          const wl = E(`IFCWALL(${G('dw|' + f.id + '|' + k)},${oh},${S(dw.name)},$,$,${pl},${sh},$)`); els.push(wl);
+          PS(wl, 'Pset_WallCommon', [['IsExternal', 'IFCBOOLEAN', B(true)], ['LoadBearing', 'IFCBOOLEAN', B(true)]], 'dwc|' + f.id + '|' + k); });
       }
       AG(st, sp, 'sp|' + f.id);
       if (els.length) E(`IFCRELCONTAINEDINSPATIALSTRUCTURE(${G('cs|' + f.id)},${oh},$,$,(${els.join(',')}),${st})`);

@@ -329,15 +329,63 @@
   }
   const metaOf = (r, meta) => ({ name: r.name, nutzung: r.nutzung, temp: r.temp, beheizt: r.beheizt, bestandsaufnahmeId: r.bestandsaufnahmeId, mitte: r.mitte, soll: ((meta || []).find(m => m.bestandsaufnahmeId && m.bestandsaufnahmeId === r.bestandsaufnahmeId) || {}).soll ?? null });
   /* Exportdokument: Höhen immer aus der Bestandsaufnahme (Höhenmodell wie Raumtool 3D), Raumhöhe je Raum, sonst lichte Höhe des Geschosses */
-  function modelDoc(p, floors, version) {
+  function modelDoc(p, floors, version, dachP) {
     const hz = hoehen(p), mm = v => (v == null ? null : Math.round(v * 1000)), f0 = p.geschosse[0] || {};
-    return { id: p.id, projektName: p.name || '', version, quelle: 'Gebäudemodell', geaendert: Date.now(), bodenplatte_mm: f0.bodenD > 0 ? Math.round(f0.bodenD * 10) : null,
+    return { id: p.id, projektName: p.name || '', version, quelle: 'Gebäudemodell', geaendert: Date.now(), bodenplatte_mm: f0.bodenD > 0 ? Math.round(f0.bodenD * 10) : null, dach: dachP || null,
       geschosse: floors.map(f => { const rs = roomsWithMeta(f.g, f.meta), bf = p.geschosse.find(x => x.id === f.id) || {}, h = hz.find(x => x.id === f.id);
         return { id: f.id, name: f.name, lageFrei: bf.lageFrei || null, baGeo: geoKey(bf), geschossHoehe_mm: h ? mm(h.Ge) : f.h, lichteHoehe_mm: h ? mm(h.lh) : bf.hoehe ? mm(bf.hoehe) : null, niveau_mm: h ? mm(h.niv) : null, rohdecke_mm: h ? mm(h.rde) : null, fussboden_mm: h ? mm(h.fb) : null, abhaengung_mm: h ? mm(h.abh) : null,
           knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen,
           raeume: rs.map(r => { const q = (bf.raeume || []).find(x => x.id === r.bestandsaufnahmeId); return { ...metaOf(r, f.meta), hoehe_mm: q && q.hoehe > 0 ? mm(q.hoehe) : null, flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur }; }) }; }) };
   }
 
-  const api = { floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  /* ---- Dach (v1): rechteckiger Grundriss = Außenumriss des obersten Geschosses (nach dem Übereinanderstellen) ----
+     Parameter: form sattel|pult|flach, neigung (Grad), first lang|quer, kniestock, ueberTraufe, ueberOrtgang, dicke (mm),
+     bezug decke (kalter Dachraum über der obersten Geschossdecke) | boden (ausgebautes Dachgeschoss ab OKFF).
+     Ergebnis in mm, Modellkoordinaten (x rechts, y unten im Plan, z nach oben ab ±0): Dachflächen (Oberseite) und Giebel-/Kniestockwände. */
+  function dachStandard(p) { const top = (p.geschosse || []).slice().reverse().find(f => (f.raeume || []).length) || {};
+    const dg = (top.raeume || []).some(r => r.decke && r.decke.grenzt === 'aussen') || /^(dg|dach)/i.test(top.name || '');
+    return { form: 'sattel', neigung: Number((p.objekt || {}).dachneigung) || 35, first: 'lang', kniestock: 0, ueberTraufe: 400, ueberOrtgang: 300, dicke: 250, bezug: dg ? 'boden' : 'decke' }; }
+  function dach(doc, d) {
+    if (!d || d.form === 'kein') return null;
+    const fs = (doc.geschosse || []).filter(f => (f.waende || []).some(w => !isHilf(w))); if (!fs.length) return null;
+    const top = fs[fs.length - 1], stp = stapeln((doc.geschosse || []).map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })))[top.id] || { dx: 0, dy: 0 };
+    const u = umriss(top); if (u.length < 3) return null;
+    const xs = u.map(q => q[0] + stp.dx), ys = u.map(q => q[1] + stp.dy); let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const H = top.geschossHoehe_mm || 2800, niv = top.niveau_mm || 0, zb = d.bezug === 'boden' ? niv : niv + H, ze = zb + (Number(d.kniestock) || 0);
+    const t = Math.tan(Math.max(0, Math.min(75, Number(d.neigung) || 0)) * Math.PI / 180), ut = Number(d.ueberTraufe) || 0, uo = Number(d.ueberOrtgang) || 0;
+    const tw = Math.max(...top.waende.filter(w => w.ext && !isHilf(w)).map(w => w.t), 240);
+    // First entlang x (Traufen an y0/y1) oder entlang y; intern immer „First entlang a“, b = quer dazu
+    const alongX = (d.first === 'quer') !== ((x1 - x0) >= (y1 - y0));
+    const P = (a, b, z) => (alongX ? [a, b, z] : [b, a, z]), A0 = alongX ? x0 : y0, A1 = alongX ? x1 : y1, B0 = alongX ? y0 : x0, B1 = alongX ? y1 : x1, bm = (B0 + B1) / 2;
+    const flaechen = [], waende = [];
+    if (d.form === 'flach') {
+      flaechen.push([P(A0 - uo, B0 - ut, ze), P(A1 + uo, B0 - ut, ze), P(A1 + uo, B1 + ut, ze), P(A0 - uo, B1 + ut, ze)]);
+      if (d.bezug !== 'boden' && ze > zb + 10) [[A0, B0, A1, B0], [A1, B0, A1, B1], [A1, B1, A0, B1], [A0, B1, A0, B0]].forEach(([a0, b0, a1, b1]) => waende.push(['Kniestock', [P(a0, b0, zb), P(a1, b1, zb), P(a1, b1, ze), P(a0, b0, ze)]]));
+    } else if (d.form === 'pult') {
+      const zAt = b => ze + (b - B0) * t;
+      flaechen.push([P(A0 - uo, B0 - ut, zAt(B0 - ut)), P(A1 + uo, B0 - ut, zAt(B0 - ut)), P(A1 + uo, B1 + ut, zAt(B1 + ut)), P(A0 - uo, B1 + ut, zAt(B1 + ut))]);
+      if (d.bezug !== 'boden') {
+        if (ze > zb + 10) waende.push(['Kniestock', [P(A0, B0, zb), P(A1, B0, zb), P(A1, B0, ze), P(A0, B0, ze)]]);
+        waende.push(['Außenwand Hochseite', [P(A1, B1, zb), P(A0, B1, zb), P(A0, B1, zAt(B1)), P(A1, B1, zAt(B1))]]);
+        waende.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, B1, zAt(B1))]]);
+        waende.push(['Giebelwand', [P(A1, B0, zb), P(A1, B1, zb), P(A1, B1, zAt(B1)), P(A1, B0, ze)]]);
+      }
+    } else { // Satteldach
+      const zr = ze + (bm - B0) * t, zt = ze - ut * t;
+      flaechen.push([P(A0 - uo, B0 - ut, zt), P(A1 + uo, B0 - ut, zt), P(A1 + uo, bm, zr), P(A0 - uo, bm, zr)]);
+      flaechen.push([P(A1 + uo, B1 + ut, zt), P(A0 - uo, B1 + ut, zt), P(A0 - uo, bm, zr), P(A1 + uo, bm, zr)]);
+      if (d.bezug !== 'boden') {
+        if (ze > zb + 10) { waende.push(['Kniestock', [P(A0, B0, zb), P(A1, B0, zb), P(A1, B0, ze), P(A0, B0, ze)]]); waende.push(['Kniestock', [P(A1, B1, zb), P(A0, B1, zb), P(A0, B1, ze), P(A1, B1, ze)]]); }
+        waende.push(['Giebelwand', [P(A0, B1, zb), P(A0, B0, zb), P(A0, B0, ze), P(A0, bm, zr), P(A0, B1, ze)]]);
+        waende.push(['Giebelwand', [P(A1, B0, zb), P(A1, B1, zb), P(A1, B1, ze), P(A1, bm, zr), P(A1, B0, ze)]]);
+      }
+    }
+    const R = q => q.map(v => Math.round(v)), dk = Number(d.dicke) || 250, dz = d.form === 'flach' ? dk : dk / Math.cos(Math.atan(t));
+    // Wände enden an der Dachunterseite (Dachfläche = Oberseite)
+    const wl = waende.map(([name, f]) => { const g = f.map(q => (q[2] > zb + 1 ? [q[0], q[1], Math.max(zb, q[2] - dz)] : q)).filter((q, i, a) => { const r = a[(i + 1) % a.length]; return Math.hypot(q[0] - r[0], q[1] - r[1], q[2] - r[2]) > 1; }); return { name, pts: g }; }).filter(w => w.pts.length >= 3 && w.pts.some(q => q[2] > zb + 1));
+    return { form: d.form, geschoss: top.id, dicke: dk, wanddicke: tw, flaechen: flaechen.map(f => f.map(R)), waende: wl.map(w => ({ name: w.name, pts: w.pts.map(R) })), firsthoehe: Math.round(Math.max(...flaechen.flat().map(q => q[2]))), traufhoehe: Math.round(ze) };
+  }
+
+  const api = { dachStandard, dach, floorsFromBA, floorsFromSaved, modelDoc, metaOf, stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

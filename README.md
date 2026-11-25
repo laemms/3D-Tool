@@ -43,6 +43,10 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
   Geänderte Räume (`GM.geoKey`) zeigen einen Hinweis „Wände neu übernehmen“; Wände werden nie stillschweigend ersetzt.
 - Geschosse übereinander (`GM.stapeln`, wie `floorAlign` der Bestandsaufnahme): gleiche Außenmaße (12 cm bzw. 1,5 %)
   werden mittig auf das EG gestellt, abweichende und „Lage frei“ bleiben wie gezeichnet. Der Export meldet das Ergebnis.
+- Dach v1 (`GM.dach`): Sattel-, Pult- oder Flachdach über dem Außenumriss des obersten Geschosses als Rechteck,
+  Kniestock, Überstände, Dachaufbau; „kalter Dachraum“ mit Giebel- und Kniestockwänden auf der obersten Geschossdecke.
+  Einstellungen im Gebäudemodell (gespeichert im Modell), Neigung vorbelegt aus der Bestandsaufnahme. Ansicht „Haus“.
+- Prüfdaten: Der Export legt `…_Gebaeudemodell.json` neben die IFC; `node tools/regen.js <json> <ifc>` baut sie nach.
 - Raumtrennung ohne Wand (offener Übergang) geht als 2-cm-Wand „Virtuelle Wand“ ins IFC: Raumtool 3D (K12) trennt
   Räume nur an Wänden, ignoriert `IfcVirtualElement` und Wände unter 2 cm (Test 25.11.2026). Kostet je Raum ~0,04 m².
 

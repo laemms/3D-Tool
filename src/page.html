@@ -58,6 +58,7 @@ tr.on td{background:var(--soft)}
 .msg{margin:8px 0 0;font-size:14px}
 dialog{border:1px solid var(--line2);border-radius:14px;background:var(--card);color:var(--ink);max-width:420px}
 dialog::backdrop{background:rgba(0,0,0,.35)}
+.grid2{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}.grid2 input,.grid2 select{width:100%;min-width:0}
 </style>
 </head>
 <body>
@@ -92,7 +93,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       <label class="small" for="o-brh">Brüstung m</label><input id="o-brh" inputmode="decimal" value="0,90">
     </div>
       <svg id="plan" role="img" aria-label="Grundriss des Gebäudemodells"></svg><canvas id="c3d" hidden></canvas>
-      <div class="views bar"><button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
+      <div class="views bar"><button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button><button id="vhaus" aria-pressed="false" title="Alle Geschosse übereinander mit Dach">Haus</button></div>
       <div class="zoom" id="zoombox"><button id="z-in" aria-label="Vergrößern">+</button><button id="z-out" aria-label="Verkleinern">−</button><button id="z-fit" aria-label="Ganzen Grundriss zeigen">⤢</button></div>
       <div class="hint" id="hint"></div>
     </div>
@@ -100,6 +101,19 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <aside class="side">
     <section class="card" id="props"><h2>Auswahl</h2><p class="small">Wand, Öffnung oder Raum antippen.</p></section>
     <section class="card"><h2>Räume</h2><div id="rooms"></div></section>
+    <section class="card" id="dachcard"><h2>Dach</h2>
+      <div class="grid2">
+        <label class="small" for="d-form">Form</label><select id="d-form"><option value="sattel">Satteldach</option><option value="pult">Pultdach</option><option value="flach">Flachdach</option><option value="kein">kein Dach</option></select>
+        <label class="small" for="d-neig">Neigung °</label><input id="d-neig" inputmode="decimal">
+        <label class="small" for="d-first">First</label><select id="d-first"><option value="lang">parallel zur langen Seite</option><option value="quer">parallel zur kurzen Seite</option></select>
+        <label class="small" for="d-knie">Kniestock cm</label><input id="d-knie" inputmode="decimal">
+        <label class="small" for="d-ut">Überstand Traufe cm</label><input id="d-ut" inputmode="decimal">
+        <label class="small" for="d-uo">Überstand Ortgang cm</label><input id="d-uo" inputmode="decimal">
+        <label class="small" for="d-dicke">Dachaufbau cm</label><input id="d-dicke" inputmode="decimal">
+        <label class="small" for="d-bezug">Dach sitzt</label><select id="d-bezug"><option value="decke">auf der obersten Geschossdecke (kalter Dachraum)</option><option value="boden">auf dem obersten Geschoss (ausgebautes Dach)</option></select>
+      </div>
+      <p class="small" id="d-info"></p>
+    </section>
     <section class="card"><h2>Modell</h2>
       <div class="bar"><button class="pri" id="save">Speichern</button><button id="ifc">IFC exportieren</button><button id="reimport" title="Modell aus den Räumen der Bestandsaufnahme neu erzeugen">Neu übernehmen</button></div>
       <p class="msg small" id="saveinfo"></p>
@@ -154,6 +168,7 @@ function fillProjects(keep) {
 const fromBA = p => GM.floorsFromBA(p);
 function selectProject(pid) {
   st.pid = pid; $('proj').value = pid; const p = st.projects[pid], m = st.models[pid];
+  st.dach = { ...GM.dachStandard(p), ...((m && m.dach) || {}) };
   if (m && m.version >= MODEL_VERSION) st.floors = GM.floorsFromSaved(p, m);
   else { st.floors = fromBA(p); st.dirty = !!st.db || !!st.local; }
   const fs = st.floors.filter(f => f.g.waende.length);
@@ -179,7 +194,7 @@ function change(fn) {
 const metaOf = r => ({ name: r.name, nutzung: r.nutzung, temp: r.temp, beheizt: r.beheizt, bestandsaufnahmeId: r.bestandsaufnahmeId, mitte: r.mitte, soll: (fl().meta.find(m => m.bestandsaufnahmeId && m.bestandsaufnahmeId === r.bestandsaufnahmeId) || {}).soll ?? null });
 function undoRedo(from, to) { const e = from.pop(); if (!e) return; const f = st.floors.find(x => x.id === e.fid); if (!f) return; to.push({ fid: f.id, s: JSON.stringify({ g: f.g, meta: f.meta }) }); const o = JSON.parse(e.s); f.g = o.g; f.meta = o.meta; if (st.fid !== f.id) selectFloor(f.id); st.sel = null; st.dirty = true; scheduleSave(); refresh(); }
 function scheduleSave() { if (!st.db && !st.local) return; clearTimeout(st.saveTimer); setSync('Ungespeichert', 'warn'); st.saveTimer = setTimeout(save, 1500); }
-function modelDoc() { return GM.modelDoc(st.projects[st.pid], st.floors, MODEL_VERSION); }
+function modelDoc() { return GM.modelDoc(st.projects[st.pid], st.floors, MODEL_VERSION, st.dach); }
 /* IFC: in den Übergabeordner der Bestandsaufnahme schreiben (lokaler Dateiserver der Claude-App, wie dort).
    Ohne Dateiserver: als ZIP herunterladen, weil der Download-Dienst .ifc nicht annimmt. */
 const strs = (v, out = []) => { if (typeof v === 'string') out.push(v); else if (Array.isArray(v)) v.forEach(x => strs(x, out)); else if (v && typeof v === 'object') Object.values(v).forEach(x => strs(x, out)); return out; };
@@ -341,6 +356,11 @@ function draw2d() {
 }
 
 /* ---------- Seitenleiste ---------- */
+/* ---------- Dach ---------- */
+const DF = [['d-form', 'form'], ['d-neig', 'neigung', 1], ['d-first', 'first'], ['d-knie', 'kniestock', 10], ['d-ut', 'ueberTraufe', 10], ['d-uo', 'ueberOrtgang', 10], ['d-dicke', 'dicke', 10], ['d-bezug', 'bezug']];
+function renderDach() { const d = st.dach || {}; for (const [id, k, f] of DF) { const el = $(id); if (document.activeElement === el) continue; el.value = f ? String(Math.round((d[k] || 0) / f * 10) / 10).replace('.', ',') : d[k]; }
+  const r = st.pid ? GM.dach(modelDoc(), d) : null; $('d-info').textContent = r ? 'Traufe ' + (r.traufhoehe / 1000).toFixed(2).replace('.', ',') + ' m, First ' + (r.firsthoehe / 1000).toFixed(2).replace('.', ',') + ' m über ±0 (über ' + (st.floors.find(f => f.id === r.geschoss) || {}).name + '). Grundriss: Außenumriss als Rechteck.' : 'Kein Dach im Modell.'; }
+for (const [id, k, f] of DF) $(id).addEventListener('change', e => { const v = f ? num(e.target.value) : e.target.value; if (f && (v == null || v < 0)) { renderDach(); return; } st.dach = { ...st.dach, [k]: f ? Math.round(v * f) : v }; st.dirty = true; scheduleSave(); renderDach(); if (st.view === 'haus') draw3d(); });
 function renderRooms() {
   const f = fl(); if (!f) return; const rs = GM.roomsWithMeta(f.g, f.meta), sum = rs.reduce((a, r) => a + r.flaeche_m2, 0);
   $('rooms').innerHTML = rs.length ? `<table><thead><tr><th>Raum</th><th class="r">m²</th><th class="r">Bestand m²</th></tr></thead><tbody>${rs.map(r => { const m = f.meta.find(x => x.bestandsaufnahmeId && x.bestandsaufnahmeId === r.bestandsaufnahmeId), on = st.sel && st.sel.kind === 'room' && GM.inPoly(st.sel.mitte, r.kontur); return `<tr class="${on ? 'on' : ''}"><td>${esc(r.name)}</td><td class="r">${nf(r.flaeche_m2)}</td><td class="r">${m && m.soll != null ? nf(m.soll) : '–'}</td></tr>`; }).join('')}<tr><td><b>Summe</b></td><td class="r"><b>${nf(sum)}</b></td><td></td></tr></tbody></table>` : '<p class="small">Noch keine geschlossenen Räume. Mit „Wand“ eine Kontur zeichnen.</p>';
@@ -372,8 +392,8 @@ function renderProps() {
     $('p-n').onchange = e => upd({ name: e.target.value.trim() || r.name }); $('p-u').onchange = e => upd({ nutzung: e.target.value.trim() }); $('p-temp').onchange = e => upd({ temp: num(e.target.value) }); }
 }
 function updButtons() { $('undo').disabled = !st.undo.length; $('redo').disabled = !st.redo.length; }
-function hintText() { $('hint').textContent = st.view === '3d' ? 'Ziehen dreht, Mausrad zoomt.' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt antippen oder Länge + Richtung · Esc oder „Fertig“ beendet' : 'Ersten Punkt antippen') : st.tool === 'open' ? 'Wand antippen, um die Öffnung zu setzen' : 'Ziehen auf leerer Fläche verschiebt den Plan · Mausrad zoomt'; }
-function refresh(refit) { if (refit) st.vw = null; const f = fl(); if (!f) return; st.view === '3d' ? draw3d() : draw2d(); renderRooms(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
+function hintText() { $('hint').textContent = st.view !== '2d' ? 'Ziehen dreht, Mausrad zoomt.' : st.tool === 'wall' ? (st.chain ? 'Nächsten Punkt antippen oder Länge + Richtung · Esc oder „Fertig“ beendet' : 'Ersten Punkt antippen') : st.tool === 'open' ? 'Wand antippen, um die Öffnung zu setzen' : 'Ziehen auf leerer Fläche verschiebt den Plan · Mausrad zoomt'; }
+function refresh(refit) { if (refit) st.vw = null; const f = fl(); if (!f) return; st.view !== '2d' ? draw3d() : draw2d(); renderRooms(); renderDach(); renderProps(); updButtons(); hintText(); $('wallbar').hidden = st.tool !== 'wall'; $('openbar').hidden = st.tool !== 'open'; }
 
 /* ---------- Zeiger ---------- */
 const svg = $('plan');
@@ -402,7 +422,7 @@ svg.addEventListener('wheel', e => { e.preventDefault(); const r = svg.getBoundi
 /* ---------- 3D ---------- */
 async function three() { if (window.THREE) return true; try { await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); }); } catch (e) { $('hint').textContent = '3D-Bibliothek konnte nicht geladen werden.'; } return !!window.THREE; }
 async function draw3d() {
-  const cv = $('c3d'); if (!(await three())) return; const T = window.THREE, f = fl(), g = f.g, N = new Map(g.knoten.map(n => [n.id, n])), Hw = f.h || 2800;
+  const cv = $('c3d'); if (!(await three())) return; const T = window.THREE;
   if (!st.t3) {
     const rnd = new T.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }), scene = new T.Scene(), cam = new T.PerspectiveCamera(40, 1, 100, 200000);
     scene.add(new T.HemisphereLight(0xffffff, 0x8a9a92, 0.9)); const sun = new T.DirectionalLight(0xffffff, 0.6); sun.position.set(-1, 2, 1.5); scene.add(sun);
@@ -414,27 +434,46 @@ async function draw3d() {
   }
   const t = st.t3; if (t.grp) t.scene.remove(t.grp); const grp = new T.Group(); t.grp = grp;
   const probe = document.createElement('i'); document.body.appendChild(probe); const col = v => { probe.style.color = `var(${v})`; return new T.Color(getComputedStyle(probe).color); };
-  const mExt = new T.MeshLambertMaterial({ color: col('--w3e') }), mIn = new T.MeshLambertMaterial({ color: col('--w3i') }), mFl = new T.MeshLambertMaterial({ color: col('--room'), side: T.DoubleSide }), mWin = new T.MeshLambertMaterial({ color: col('--win'), transparent: true, opacity: 0.45 }); probe.remove();
-  const piece = (w, s0, s1, z0, z1, m) => { if (s1 - s0 < 5 || z1 - z0 < 5) return; const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], S = [-u[1], u[0]], ts = w.ts == null ? w.t / 2 : w.ts, sh = ts - w.t / 2, c = (s0 + s1) / 2;
-    const mesh = new T.Mesh(new T.BoxGeometry(s1 - s0, z1 - z0, Math.max(w.t, 20)), m); mesh.position.set(a.x + u[0] * c + S[0] * sh, (z0 + z1) / 2, a.y + u[1] * c + S[1] * sh); mesh.rotation.y = -Math.atan2(u[1], u[0]); grp.add(mesh); };
-  for (const w of g.waende.filter(x => !GM.isHilf(x))) { const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), m = w.ext ? mExt : mIn, ops = g.oeffnungen.filter(o => o.wand === w.id).map(o => ({ ...o, s0: Math.max(0, o.abstand), s1: Math.min(L, o.abstand + o.breite) })).sort((x, y) => x.s0 - y.s0);
-    let c = 0; for (const o of ops) { piece(w, c, o.s0, 0, Hw, m); piece(w, o.s0, o.s1, 0, o.brh, m); piece(w, o.s0, o.s1, o.brh + o.hoehe, Hw, m); if (!/tuer/.test(o.typ || '')) piece(w, o.s0, o.s1, o.brh, o.brh + o.hoehe, mWin); c = o.s1; } piece(w, c, L, 0, Hw, m); }
-  for (const c of GM.nodeCaps(g)) { const geo = new T.ExtrudeGeometry(new T.Shape(c.poly.map(q => new T.Vector2(q[0], q[1]))), { depth: Hw, bevelEnabled: false }), ms = new T.Mesh(geo, c.ext ? mExt : mIn); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; grp.add(ms); }
-  for (const r of GM.roomsWithMeta(g, f.meta)) { const ms = new T.Mesh(new T.ShapeGeometry(new T.Shape(r.kontur.map(q => new T.Vector2(q[0], q[1])))), mFl); ms.rotation.x = Math.PI / 2; grp.add(ms); }
-  let x0 = 1e12, z0 = 1e12, x1 = -1e12, z1 = -1e12; g.knoten.forEach(n => { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); z0 = Math.min(z0, n.y); z1 = Math.max(z1, n.y); }); if (x1 < x0) { x0 = z0 = 0; x1 = z1 = 8000; }
-  t.c = [(x0 + x1) / 2, 1000, (z0 + z1) / 2]; t.dist = Math.max(x1 - x0, z1 - z0) * 1.9 + 4000; t.scene.add(grp); frame();
+  const mExt = new T.MeshLambertMaterial({ color: col('--w3e') }), mIn = new T.MeshLambertMaterial({ color: col('--w3i') }), mFl = new T.MeshLambertMaterial({ color: col('--room'), side: T.DoubleSide }), mWin = new T.MeshLambertMaterial({ color: col('--win'), transparent: true, opacity: 0.45 });
+  const mSlab = new T.MeshLambertMaterial({ color: col('--w3i'), transparent: true, opacity: 0.55 }), mRoof = new T.MeshLambertMaterial({ color: new T.Color(0xb5523b), side: T.DoubleSide }); probe.remove();
+  // Haus: alle Geschosse übereinander (wie im IFC), sonst nur das gewählte Geschoss
+  const haus = st.view === 'haus', doc = modelDoc(), stp = GM.stapeln(doc.geschosse.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f })));
+  const list = haus ? st.floors : [fl()]; let x0 = 1e12, z0 = 1e12, x1 = -1e12, z1 = -1e12, yTop = 0, yBot = 0;
+  for (const f of list) {
+    const g = f.g, N = new Map(g.knoten.map(n => [n.id, n])), D = doc.geschosse.find(x => x.id === f.id) || {}, Hw = D.geschossHoehe_mm || f.h || 2800, off = haus ? stp[f.id] || { dx: 0, dy: 0 } : { dx: 0, dy: 0 }, fg = new T.Group();
+    fg.position.set(off.dx, haus ? D.niveau_mm || 0 : 0, off.dy); grp.add(fg); yTop = Math.max(yTop, (haus ? D.niveau_mm || 0 : 0) + Hw); yBot = Math.min(yBot, haus ? D.niveau_mm || 0 : 0);
+    const piece = (w, s0, s1, za, zb, m) => { if (s1 - s0 < 5 || zb - za < 5) return; const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), u = [(b.x - a.x) / L, (b.y - a.y) / L], S = [-u[1], u[0]], ts = w.ts == null ? w.t / 2 : w.ts, sh = ts - w.t / 2, c = (s0 + s1) / 2;
+      const mesh = new T.Mesh(new T.BoxGeometry(s1 - s0, zb - za, Math.max(w.t, 20)), m); mesh.position.set(a.x + u[0] * c + S[0] * sh, (za + zb) / 2, a.y + u[1] * c + S[1] * sh); mesh.rotation.y = -Math.atan2(u[1], u[0]); fg.add(mesh); };
+    for (const w of g.waende.filter(x => !GM.isHilf(x))) { const a = N.get(w.a), b = N.get(w.b), L = Math.hypot(b.x - a.x, b.y - a.y), m = w.ext ? mExt : mIn, ops = g.oeffnungen.filter(o => o.wand === w.id).map(o => ({ ...o, s0: Math.max(0, o.abstand), s1: Math.min(L, o.abstand + o.breite) })).sort((x, y) => x.s0 - y.s0);
+      let c = 0; for (const o of ops) { piece(w, c, o.s0, 0, Hw, m); piece(w, o.s0, o.s1, 0, o.brh, m); piece(w, o.s0, o.s1, o.brh + o.hoehe, Hw, m); if (!/tuer/.test(o.typ || '') || o.typ === 'fenstertuer') piece(w, o.s0, o.s1, o.brh, o.brh + o.hoehe, mWin); c = o.s1; } piece(w, c, L, 0, Hw, m); }
+    for (const c of GM.nodeCaps(g)) { const geo = new T.ExtrudeGeometry(new T.Shape(c.poly.map(q => new T.Vector2(q[0], q[1]))), { depth: Hw, bevelEnabled: false }), ms = new T.Mesh(geo, c.ext ? mExt : mIn); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; fg.add(ms); }
+    for (const r of GM.roomsWithMeta(g, f.meta)) { const ms = new T.Mesh(new T.ShapeGeometry(new T.Shape(r.kontur.map(q => new T.Vector2(q[0], q[1])))), mFl); ms.rotation.x = Math.PI / 2; ms.position.y = 2; fg.add(ms); }
+    if (haus && D.rohdecke_mm > 0) { const u = GM.umriss(g); if (u.length >= 3) { const ms = new T.Mesh(new T.ExtrudeGeometry(new T.Shape(u.map(q => new T.Vector2(q[0], q[1]))), { depth: D.rohdecke_mm, bevelEnabled: false }), mSlab); ms.rotation.x = Math.PI / 2; ms.position.y = Hw; fg.add(ms); } }
+    g.knoten.forEach(n => { x0 = Math.min(x0, n.x + off.dx); x1 = Math.max(x1, n.x + off.dx); z0 = Math.min(z0, n.y + off.dy); z1 = Math.max(z1, n.y + off.dy); });
+  }
+  // Dach: ebene Platten aus 3D-Polygonen (Modell: x, y im Plan, z oben → three: x, y oben, z)
+  const plate = (pts, depth, m, inward) => { const P = pts.map(q => new T.Vector3(q[0], q[2], q[1])), O = P[0], X = P[1].clone().sub(O).normalize(); let Nn = X.clone().cross(P[P.length - 1].clone().sub(O)).normalize();
+    if (inward) { if (Nn.dot(inward.clone().sub(O)) < 0) Nn.negate(); } else if (Nn.y < 0) Nn.negate();
+    const Y = Nn.clone().cross(X), sh = new T.Shape(P.map(q => { const d = q.clone().sub(O); return new T.Vector2(d.dot(X), d.dot(Y)); }));
+    const ms = new T.Mesh(new T.ExtrudeGeometry(sh, { depth, bevelEnabled: false }), m); ms.matrixAutoUpdate = false; ms.matrix.makeBasis(X, Y, Nn).setPosition(inward ? O : O.clone().addScaledVector(Nn, -depth)); grp.add(ms); };
+  const DA = haus ? GM.dach(doc, st.dach) : null;
+  if (DA) { DA.flaechen.forEach(q => plate(q, DA.dicke, mRoof)); const all = DA.waende.flatMap(w => w.pts), c = all.length ? new T.Vector3(all.reduce((a, q) => a + q[0], 0) / all.length, 0, all.reduce((a, q) => a + q[1], 0) / all.length) : null;
+    DA.waende.forEach(w => { const cc = c.clone(); cc.y = w.pts[0][2]; plate(w.pts, DA.wanddicke, mExt, cc); }); yTop = Math.max(yTop, DA.firsthoehe); }
+  if (x1 < x0) { x0 = z0 = 0; x1 = z1 = 8000; }
+  t.c = [(x0 + x1) / 2, haus ? (yTop + yBot) / 2 : 1000, (z0 + z1) / 2]; t.dist = Math.max(x1 - x0, z1 - z0, haus ? yTop - yBot : 0) * (haus ? 2.3 : 1.9) + 4000; t.scene.add(grp); frame();
 }
 function frame() { const t = st.t3, cv = $('c3d'); if (!t) return; const w = cv.clientWidth || 800, h = cv.clientHeight || 500; t.rnd.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); t.rnd.setSize(w, h, false); t.cam.aspect = w / h; t.cam.updateProjectionMatrix(); t.cam.position.set(t.c[0] + Math.cos(t.rot) * Math.cos(t.tilt) * t.dist, t.c[1] + Math.sin(t.tilt) * t.dist, t.c[2] + Math.sin(t.rot) * Math.cos(t.tilt) * t.dist); t.cam.lookAt(t.c[0], t.c[1], t.c[2]); t.rnd.render(t.scene, t.cam); }
 
 /* ---------- Bedienelemente ---------- */
 function selectFloor(id) { st.fid = id; st.sel = null; st.chain = null; [...$('floors').children].forEach(x => x.setAttribute('aria-pressed', x.dataset.f === id)); refresh(true); }
 function setTool(t) { if (st.chain) endChain(false); st.tool = t; st.hover = null; ['sel', 'wall', 'open'].forEach(k => $('t-' + k).setAttribute('aria-pressed', k === t)); if (t !== 'sel') setView('2d'); refresh(); }
-function setView(v) { st.view = v; $('v2d').setAttribute('aria-pressed', v === '2d'); $('v3d').setAttribute('aria-pressed', v === '3d'); $('plan').toggleAttribute('hidden', v !== '2d'); $('c3d').toggleAttribute('hidden', v !== '3d'); $('zoombox').hidden = v !== '2d'; refresh(); }
+function setView(v) { st.view = v; $('v2d').setAttribute('aria-pressed', v === '2d'); $('v3d').setAttribute('aria-pressed', v === '3d'); $('vhaus').setAttribute('aria-pressed', v === 'haus'); $('plan').toggleAttribute('hidden', v !== '2d'); $('c3d').toggleAttribute('hidden', v === '2d'); $('zoombox').hidden = v !== '2d'; refresh(); }
 function confirmBox(text) { return new Promise(res => { const d = $('dlg'); $('dlg-t').textContent = text; d.showModal(); const done = v => { d.close(); $('dlg-yes').onclick = $('dlg-no').onclick = null; res(v); }; $('dlg-yes').onclick = () => done(true); $('dlg-no').onclick = () => done(false); }); }
 $('proj').addEventListener('change', e => { if (st.dirty) save(); selectProject(e.target.value); });
 $('floors').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) selectFloor(b.dataset.f); });
 ['sel', 'wall', 'open'].forEach(k => $('t-' + k).addEventListener('click', () => setTool(k)));
 $('v2d').addEventListener('click', () => setView('2d')); $('v3d').addEventListener('click', () => { if (st.tool !== 'sel') setTool('sel'); setView('3d'); });
+$('vhaus').addEventListener('click', () => { if (st.tool !== 'sel') setTool('sel'); setView('haus'); });
 $('undo').addEventListener('click', () => undoRedo(st.undo, st.redo)); $('redo').addEventListener('click', () => undoRedo(st.redo, st.undo));
 $('z-in').addEventListener('click', () => zoomAt(1.3, svg.clientWidth / 2, svg.clientHeight / 2)); $('z-out').addEventListener('click', () => zoomAt(1 / 1.3, svg.clientWidth / 2, svg.clientHeight / 2)); $('z-fit').addEventListener('click', () => { st.vw = null; draw2d(); });
 $('w-typ').addEventListener('change', e => { $('w-t').value = e.target.value === 'aussen' ? '36,5' : '11,5'; $('w-bezug').disabled = e.target.value !== 'aussen'; });
