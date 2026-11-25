@@ -15,4 +15,10 @@ with sync_playwright() as pw:
     pg.evaluate("window.showDirectoryPicker = undefined")
     with pg.expect_download() as dl: pg.click('#ifc')
     d = dl.value; print('Download:', d.suggested_filename, pg.inner_text('#saveinfo'))
-    print('Fehler:', errs); b.close()
+    # Fenster in der Bestandsaufnahme nachtragen: muss im gespeicherten Modell erscheinen
+    n0 = pg.evaluate("window.__gm.st.floors.reduce((s, f) => s + f.g.oeffnungen.filter(o => o.wand).length, 0)")
+    pg.evaluate("""() => { const all = JSON.parse(localStorage.getItem('ba.v1')); const q = all.mwbogner, f = q.geschosse.find(g => g.raeume.length), r = f.raeume[0];
+      const s = r.segs.find(x => x.grenzt === 'aussen') || r.segs[0]; s.oeffnungen = (s.oeffnungen || []).concat([{ id: 'neu1', typ: 'fenster', b: 1.0, h: 1.2, bruest: 0.9, anz: 1 }]); q.geaendert++; localStorage.setItem('ba.v1', JSON.stringify(all)); }""")
+    pg.reload(); pg.wait_for_timeout(1500)
+    n1 = pg.evaluate("window.__gm.st.floors.reduce((s, f) => s + f.g.oeffnungen.filter(o => o.wand).length, 0)"); print('Öffnungen vorher/nachher:', n0, n1); assert n1 == n0 + 1
+    print('Fehler:', errs); assert not errs; b.close()

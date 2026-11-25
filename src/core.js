@@ -147,7 +147,7 @@
         // Raumtrennung ohne Wand (Räume liegen direkt aneinander, z. B. offener Übergang): Hilfskante auf der Raumseite
         for (const pt0 of parts) { const pt = pt0.t <= 0.001 ? Object.assign(pt0, { t: HILF / 1000, offen: true }) : pt0; const ax = pt.offen ? 0 : axOf(o, i, pt); pt.ax = ax; const a = [S.a[0] + S.dir[0] * pt.von + S.n[0] * ax, S.a[1] + S.dir[1] * pt.von + S.n[1] * ax], b = [S.a[0] + S.dir[0] * pt.bis + S.n[0] * ax, S.a[1] + S.dir[1] * pt.bis + S.n[1] * ax]; pieces.push({ a, b, d: S.dir, t: pt.t, ts: roomOnS ? ax : pt.t - ax, ax, ext: pt.ext, src: o.r.id + ':' + i }); }
         // Öffnungen: Lage auf der Raumseite → Punkt auf der Wandachse
-        const list = []; for (const op of s.oeffnungen || []) { const k = Math.max(1, Math.round(op.anz || 1)); for (let j = 0; j < k; j++) list.push(op); }
+        const list = []; for (const op of s.oeffnungen || []) { const k = Math.max(1, Math.round(op.anz || 1)); for (let j = 0; j < k; j++) list.push(k > 1 ? { ...op, id: op.id + '#' + (j + 1) } : op); }
         // automatisch platzierte Öffnungen: in den längsten passenden Abschnitt (Innentür → Abschnitt mit Nachbar, sonst Außenabschnitt)
         // gleichmäßig mit gleichen Abständen verteilen (die Bestandsaufnahme setzt nur die Mitten auf L·k/(n+1), dabei überlappen breite Fenster)
         const spread = (von, bis, xs) => { const tot = xs.reduce((a, x) => a + x.bw, 0), gap = Math.max(0, (bis - von - tot) / (xs.length + 1)); let c = von; xs.forEach(x => { c += gap; x.cc = c + x.bw / 2; c += x.bw; }); };
@@ -171,7 +171,7 @@
     // Öffnungen der nächstgelegenen Wand zuordnen, doppelte entfernen
     const N = new Map(g.knoten.map(nn => [nn.id, nn]));
     for (const op of openings) {
-      let best = null; for (const w of g.waende) { const a = [N.get(w.a).x, N.get(w.a).y], b = [N.get(w.b).x, N.get(w.b).y], pr = segProj(op.m, a, b); if (pr.t >= 0 && pr.t <= 1 && (!best || pr.d < best.d)) best = { w, d: pr.d, t: pr.t, L: len(sub(b, a)) }; }
+      let best = null; for (const w of g.waende) { if (isHilf(w)) continue; const a = [N.get(w.a).x, N.get(w.a).y], b = [N.get(w.b).x, N.get(w.b).y], pr = segProj(op.m, a, b); if (pr.t >= 0 && pr.t <= 1 && (!best || pr.d < best.d)) best = { w, d: pr.d, t: pr.t, L: len(sub(b, a)) }; }
       if (!best || best.d > 200) continue;
       // innerhalb der Wand halten (Abschnitte der Bestandsaufnahme können über einen Wandstoß hinausreichen)
       const breite = Math.min(op.breite, Math.max(200, best.L - 20)), abstand = Math.round(Math.max(10, Math.min(best.L - breite - 10, best.t * best.L - breite / 2)));
@@ -196,7 +196,7 @@
   function attachOpenings(g, pts) {
     const N = nodeMap(g); g.oeffnungen = [];
     for (const { o, m, dir } of pts) {
-      let best = null; for (const w of g.waende) { const [a, b] = wallEnds(g, w, N), pr = segProj(m, a, b), d = sub(b, a), L = len(d) || 1; if (pr.t >= 0 && pr.t <= 1 && Math.abs(dot([d[0] / L, d[1] / L], dir)) > 0.95 && (!best || pr.d < best.d)) best = { w, d: pr.d, t: pr.t, L }; }
+      let best = null; for (const w of g.waende) { if (isHilf(w)) continue; const [a, b] = wallEnds(g, w, N), pr = segProj(m, a, b), d = sub(b, a), L = len(d) || 1; if (pr.t >= 0 && pr.t <= 1 && Math.abs(dot([d[0] / L, d[1] / L], dir)) > 0.95 && (!best || pr.d < best.d)) best = { w, d: pr.d, t: pr.t, L }; }
       if (!best || best.d > 200) continue;
       const breite = Math.min(o.breite, best.L - 20); if (breite < 200) continue;
       g.oeffnungen.push({ ...o, wand: best.w.id, breite, abstand: Math.round(Math.max(10, Math.min(best.L - breite - 10, best.t * best.L - breite / 2))) });
@@ -210,9 +210,10 @@
     moveNode: (g, id, x, y) => { const h = clone(g), pts = openingPoints(g), n = h.knoten.find(k => k.id === id); if (!n) return g; n.x = Math.round(x); n.y = Math.round(y); return rebuild(h, toSegs(h), pts); },
     setWall: (g, id, patch) => { const h = clone(g), w = h.waende.find(x => x.id === id); if (!w) return g; const t0 = w.t, side = (w.ts == null ? t0 / 2 : w.ts) / (t0 || 1); Object.assign(w, patch); if (patch.t != null && patch.ts == null) w.ts = Math.round(patch.t * side * 2) / 2; return h; },
     flipWall: (g, id) => { const h = clone(g), w = h.waende.find(x => x.id === id); if (w) w.ts = w.t - (w.ts == null ? w.t / 2 : w.ts); return h; },
-    addOpening: (g, wallId, center, props) => { const h = clone(g), w = h.waende.find(x => x.id === wallId); if (!w) return g; const [a, b] = wallEnds(h, w), L = len(sub(b, a)), breite = Math.min(props.breite, L - 20); if (breite < 200) return g; const id = 'o' + (1 + Math.max(0, ...h.oeffnungen.map(o => +String(o.id).slice(1) || 0))); h.oeffnungen.push({ id, wand: wallId, typ: props.typ, breite, hoehe: props.hoehe, brh: props.brh, abstand: Math.round(Math.max(10, Math.min(L - breite - 10, center - breite / 2))) }); return h; },
-    setOpening: (g, id, patch) => { const h = clone(g), o = h.oeffnungen.find(x => x.id === id); if (o) Object.assign(o, patch); return h; },
-    deleteOpening: (g, id) => { const h = clone(g); h.oeffnungen = h.oeffnungen.filter(o => o.id !== id); return h; }
+    addOpening: (g, wallId, center, props) => { const h = clone(g), w = h.waende.find(x => x.id === wallId); if (!w) return g; const [a, b] = wallEnds(h, w), L = len(sub(b, a)), breite = Math.min(props.breite, L - 20); if (breite < 200) return g; const id = 'o' + (1 + Math.max(0, ...h.oeffnungen.map(o => +String(o.id).slice(1) || 0))); h.oeffnungen.push({ id, eigen: true, wand: wallId, typ: props.typ, breite, hoehe: props.hoehe, brh: props.brh, abstand: Math.round(Math.max(10, Math.min(L - breite - 10, center - breite / 2))) }); return h; },
+    // Öffnungen aus der Bestandsaufnahme (quelle) bleiben dort führend; eine Änderung im Editor ersetzt sie dauerhaft, Löschen blendet sie aus
+    setOpening: (g, id, patch) => { const h = clone(g), o = h.oeffnungen.find(x => x.id === id); if (o) { Object.assign(o, patch); if (o.quelle) { o.ersetzt = o.quelle; delete o.quelle; } } return h; },
+    deleteOpening: (g, id) => { const h = clone(g), o = h.oeffnungen.find(x => x.id === id); h.oeffnungen = h.oeffnungen.filter(x => x.id !== id); if (o && (o.quelle || o.ersetzt)) h.oeffnungen.push({ id: o.id, ersetzt: o.quelle || o.ersetzt, geloescht: true, wand: null }); return h; }
   };
   // Räume mit Namen: neue Flächen erben Name und Nutzung des alten Raums, dessen Mittelpunkt in ihnen liegt
   function roomsWithMeta(g, meta) {
@@ -281,6 +282,27 @@
     return changed ? { ...g, oeffnungen: os } : g;
   }
 
-  const api = { fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  /* Abgleich mit der Bestandsaufnahme beim Laden eines gespeicherten Modells:
+     Öffnungen kommen immer aus der Bestandsaufnahme (neu, geändert, gelöscht), eigene und im Editor ersetzte bleiben.
+     Raumdaten (Name, Nutzung, Temperatur, beheizt, Sollfläche) werden nachgeführt. Wände bleiben, wie sie gespeichert sind. */
+  function syncFromBA(p, f, g, meta) {
+    const fresh = fromBestandsaufnahme(p, f), own = (g.oeffnungen || []).filter(o => o.eigen || o.ersetzt), ersetzt = new Set(own.map(o => o.ersetzt).filter(Boolean));
+    const pts = openingPoints(fresh.graph).filter(x => !ersetzt.has(x.o.quelle));
+    const h = attachOpenings({ ...g, oeffnungen: [] }, pts); let k = 0; const used = new Set(own.map(o => o.id));
+    h.oeffnungen.forEach(o => { do k++; while (used.has('b' + k)); o.id = 'b' + k; used.add(o.id); });
+    h.oeffnungen = [...own, ...h.oeffnungen];
+    const byId = new Map(fresh.raeume.filter(r => r.bestandsaufnahme).map(r => [r.bestandsaufnahme.id, r.bestandsaufnahme]));
+    const src = new Map((f.raeume || []).map(r => [r.id, r]));
+    const m2 = (meta || []).map(m => { const q = m.bestandsaufnahmeId && src.get(m.bestandsaufnahmeId); if (!q) return m; const b = byId.get(q.id);
+      return { ...m, name: q.name || m.name, nutzung: q.nutzung || '', temp: q.temp ?? null, beheizt: q.beheizt ?? null, soll: b ? b.flaeche_m2 : m.soll }; });
+    return { g: h, meta: m2 };
+  }
+  /* Kennung der Geometrie einer Etage in der Bestandsaufnahme (Lage, Wandlängen, -richtungen, -dicken, Nachbarn), ohne Öffnungen */
+  function geoKey(f) {
+    const s = JSON.stringify((f.raeume || []).map(r => [r.id, r.x, r.y, (r.segs || []).map(q => [q.dir, q.len, q.dicke, q.grenzt, q.nachbarId, q.bauteilId])]).concat([f.wd]));
+    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36);
+  }
+
+  const api = { syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -38,6 +38,9 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Höhen kommen aus dem Höhenmodell der Bestandsaufnahme (`GM.hoehen`, wie Raumtool 3D): Geschossniveau (OKFF) als
   Elevation, Raumhöhe je Raum als IfcSpace-Höhe, Rohdecke als IfcSlab über jedem Geschoss, Bodenplatte nur wenn erfasst.
   Raumtool 3D übernimmt Niveau und Raumhöhen, die Rohdecke aber nicht aus der IfcSlab (setzt 25 cm; Test 25.11.2026).
+- Abgleich beim Laden (`GM.syncFromBA`): Fenster und Türen kommen immer aus der Bestandsaufnahme (Kennung `quelle`),
+  im Editor geänderte gelten als Ersatz (`ersetzt`), eigene als `eigen`. Raumdaten werden nachgeführt.
+  Geänderte Räume (`GM.geoKey`) zeigen einen Hinweis „Wände neu übernehmen“; Wände werden nie stillschweigend ersetzt.
 - Raumtrennung ohne Wand (offener Übergang) geht als 2-cm-Wand „Virtuelle Wand“ ins IFC: Raumtool 3D (K12) trennt
   Räume nur an Wänden, ignoriert `IfcVirtualElement` und Wände unter 2 cm (Test 25.11.2026). Kostet je Raum ~0,04 m².
 

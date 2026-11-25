@@ -108,6 +108,18 @@ t('Gespeicherte Modelle: überlappende Öffnungen werden verteilt', () => { let 
   assert.deepStrictEqual(GM.fixOpenings(g).oeffnungen.map(o => o.abstand), [300, 1800]); const h = { ...g, oeffnungen: [g.oeffnungen[0]] }; assert.strictEqual(GM.fixOpenings(h), h);
   const k = { ...g, oeffnungen: [{ id: 'd', wand: id, abstand: -65, breite: 885 }] }; assert.strictEqual(GM.fixOpenings(k).oeffnungen[0].abstand, 10, 'Tür ragte über das Wandende');
 });
+t('Abgleich: neue Fenster aus der Bestandsaufnahme erscheinen im gespeicherten Modell, Editor-Änderungen bleiben', () => {
+  const mk = ops => ({ id: 'r', name: 'Wohnen', x: 0, y: 0, beheizt: 'ja', temp: 20, segs: [0, 90, 180, 270].map((d, i) => ({ dir: d, len: i % 2 ? 4 : 5, grenzt: 'aussen', nachbarId: '', oeffnungen: i === 0 ? ops : [] })) });
+  const f0 = { id: 'eg', name: 'EG', raeume: [mk([])] }, p0 = { bauteile: [], geschosse: [f0] }, g0 = GM.fromBestandsaufnahme(p0, f0).graph, meta = [{ name: 'Wohnen', bestandsaufnahmeId: 'r', temp: 20, mitte: [2500, 2000] }];
+  const f1 = { id: 'eg', name: 'EG', raeume: [{ ...mk([{ id: 'fe', typ: 'fenster', b: 1.2, h: 1.3, bruest: 0.9, anz: 2 }]), temp: 22 }] }, p1 = { bauteile: [], geschosse: [f1] };
+  const r = GM.syncFromBA(p1, f1, g0, meta); assert.strictEqual(r.g.oeffnungen.length, 2); assert.strictEqual(r.meta[0].temp, 22);
+  assert.notStrictEqual(GM.geoKey(f0), GM.geoKey({ ...f0, raeume: [{ ...mk([]), x: 1 }] })); assert.strictEqual(GM.geoKey(f0), GM.geoKey(f1));
+  const o = r.g.oeffnungen[0], g2 = GM.edit.setOpening(r.g, o.id, { abstand: 300 }), r2 = GM.syncFromBA(p1, f1, g2, r.meta);
+  assert.strictEqual(r2.g.oeffnungen.length, 2); assert.ok(r2.g.oeffnungen.some(x => x.ersetzt && x.abstand === 300));
+  const g3 = GM.edit.deleteOpening(r2.g, r2.g.oeffnungen.find(x => x.quelle).id), r3 = GM.syncFromBA(p1, f1, g3, r.meta);
+  assert.strictEqual(r3.g.oeffnungen.filter(x => x.wand).length, 1, 'gelöschtes Fenster bleibt weg');
+  const f2 = { ...f1, raeume: [mk([])] }; assert.strictEqual(GM.syncFromBA({ bauteile: [], geschosse: [f2] }, f2, r3.g, r.meta).g.oeffnungen.filter(x => x.wand).length, 1, 'ersetztes Fenster bleibt, auch wenn es in der Bestandsaufnahme fehlt');
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----
