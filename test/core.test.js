@@ -120,6 +120,13 @@ t('Abgleich: neue Fenster aus der Bestandsaufnahme erscheinen im gespeicherten M
   assert.strictEqual(r3.g.oeffnungen.filter(x => x.wand).length, 1, 'gelöschtes Fenster bleibt weg');
   const f2 = { ...f1, raeume: [mk([])] }; assert.strictEqual(GM.syncFromBA({ bauteile: [], geschosse: [f2] }, f2, r3.g, r.meta).g.oeffnungen.filter(x => x.wand).length, 1, 'ersetztes Fenster bleibt, auch wenn es in der Bestandsaufnahme fehlt');
 });
+t('Geschosse übereinander: gleiche Außenmaße mittig auf das EG, abweichende bleiben', () => {
+  const box = (x, y, w, h) => { let g = { knoten: [], waende: [], oeffnungen: [] }; const A = { t: 365, ts: 0, ext: true };
+    g = GM.edit.addWall(g, [x, y], [x + w, y], A); g = GM.edit.addWall(g, [x + w, y], [x + w, y + h], A); g = GM.edit.addWall(g, [x + w, y + h], [x, y + h], A); g = GM.edit.addWall(g, [x, y + h], [x, y], A); return g; };
+  const s = GM.stapeln([{ id: 'kg', name: 'KG', g: box(1000, 3000, 6500, 10200) }, { id: 'eg', name: 'EG', g: box(2000, 6000, 6500, 10200) }, { id: 'og', name: 'OG', g: box(0, 0, 6550, 10250) }, { id: 'dg', name: 'DG', g: box(0, 0, 4000, 6000) }, { id: 'x', name: 'Anbau', g: box(0, 0, 6500, 10200), lageFrei: 'ja' }]);
+  assert.deepStrictEqual([s.kg.dx, s.kg.dy, s.kg.st], [1000, 3000, 'gleich']); assert.strictEqual(s.eg.st, 'bezug'); assert.deepStrictEqual([s.og.dx, s.og.dy], [1975, 5975]);
+  assert.deepStrictEqual([s.dg.dx, s.dg.st], [0, 'abw']); assert.strictEqual(s.x.st, 'frei');
+});
 console.log('Bearbeiten geprüft');
 
 // ---- Querwände und Kreuzungen wie im Obergeschoss einer Doppelhaushälfte (synthetisch) ----

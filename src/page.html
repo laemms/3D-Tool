@@ -187,7 +187,7 @@ function scheduleSave() { if (!st.db && !st.local) return; clearTimeout(st.saveT
 function modelDoc() { const p = st.projects[st.pid], hz = GM.hoehen(p), mm = v => (v == null ? null : Math.round(v * 1000)), f0 = p.geschosse[0] || {};
   return { id: p.id, projektName: p.name || '', version: MODEL_VERSION, quelle: 'Gebäudemodell', geaendert: Date.now(), bodenplatte_mm: f0.bodenD > 0 ? Math.round(f0.bodenD * 10) : null,
     geschosse: st.floors.map(f => { const rs = GM.roomsWithMeta(f.g, f.meta), bf = p.geschosse.find(x => x.id === f.id) || {}, h = hz.find(x => x.id === f.id);
-      return { id: f.id, name: f.name, baGeo: GM.geoKey(bf), geschossHoehe_mm: h ? mm(h.Ge) : f.h, lichteHoehe_mm: h ? mm(h.lh) : bf.hoehe ? mm(bf.hoehe) : null, niveau_mm: h ? mm(h.niv) : null, rohdecke_mm: h ? mm(h.rde) : null, fussboden_mm: h ? mm(h.fb) : null, abhaengung_mm: h ? mm(h.abh) : null,
+      return { id: f.id, name: f.name, lageFrei: bf.lageFrei || null, baGeo: GM.geoKey(bf), geschossHoehe_mm: h ? mm(h.Ge) : f.h, lichteHoehe_mm: h ? mm(h.lh) : bf.hoehe ? mm(bf.hoehe) : null, niveau_mm: h ? mm(h.niv) : null, rohdecke_mm: h ? mm(h.rde) : null, fussboden_mm: h ? mm(h.fb) : null, abhaengung_mm: h ? mm(h.abh) : null,
         knoten: f.g.knoten, waende: f.g.waende, oeffnungen: f.g.oeffnungen,
         raeume: rs.map(r => { const q = (bf.raeume || []).find(x => x.id === r.bestandsaufnahmeId); return { ...metaOf(r), hoehe_mm: q && q.hoehe > 0 ? mm(q.hoehe) : null, flaeche_m2: Math.round(r.flaeche_m2 * 100) / 100, kontur: r.kontur }; }) }; }) }; }
 /* IFC: in den Übergabeordner der Bestandsaufnahme schreiben (lokaler Dateiserver der Claude-App, wie dort).
@@ -224,16 +224,18 @@ async function saveLocalFile(name, txt) {
 async function exportIfc() {
   const p = st.projects[st.pid]; if (!p) return; const info = $('saveinfo'), F = st.firma || {};
   const base = String(p.name || p.id).replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim().replace(/\s+/g, '_') || 'Projekt', name = base + '_Gebaeudemodell.ifc';
-  let txt; try { txt = GMIFC.exportIFC(modelDoc(), { bearbeiter: F.bearbeiter || '', organisation: F.marke || 'cL-energiePlan', nord: (p.objekt || {}).nord || 0 }); } catch (e) { info.textContent = 'IFC konnte nicht erzeugt werden: ' + e.message; return; }
+  const doc0 = modelDoc(), stp = GM.stapeln(doc0.geschosse.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: f }))), nm = st => doc0.geschosse.filter(f => stp[f.id].st === st).map(f => f.name);
+  const ref = nm('bezug')[0], sum = ref ? ' ' + [nm('gleich').length ? nm('gleich').join(', ') + ' auf ' + ref + ' gestellt.' : '', nm('abw').length ? nm('abw').join(', ') + ': andere Außenmaße, Lage wie gezeichnet.' : ''].filter(Boolean).join(' ') : '';
+  let txt; try { txt = GMIFC.exportIFC(doc0, { bearbeiter: F.bearbeiter || '', organisation: F.marke || 'cL-energiePlan', nord: (p.objekt || {}).nord || 0 }); } catch (e) { info.textContent = 'IFC konnte nicht erzeugt werden: ' + e.message; return; }
   $('ifc').disabled = true; info.textContent = 'IFC wird übergeben …'; let why = '';
-  if (st.local) { try { info.textContent = await saveLocalFile(name, txt); } catch (e) { info.textContent = e && e.name === 'AbortError' ? 'Abgebrochen.' : 'IFC konnte nicht gespeichert werden: ' + ((e && e.message) || e); } $('ifc').disabled = false; return; }
+  if (st.local) { try { info.textContent = await saveLocalFile(name, txt) + sum; } catch (e) { info.textContent = e && e.name === 'AbortError' ? 'Abgebrochen.' : 'IFC konnte nicht gespeichert werden: ' + ((e && e.message) || e); } $('ifc').disabled = false; return; }
   try {
     const mcp = window.claude && window.claude.use ? await window.claude.use('mcp') : null; if (!mcp) throw { code: 'server_not_connected' };
     let dir = (F.scOrdner || '').trim();
     if (!dir) { const r = await mcp.callTool('host:filesystem', 'list_allowed_directories', {}); dir = strs([r.payload, r.structuredContent, (r.content || []).map(b => b && b.text)]).join('\n').split(/\r?\n/).map(x => x.trim()).find(x => /^([A-Za-z]:[\\/]|\/)/.test(x)) || ''; }
     if (!dir) throw { message: 'Der Dateiserver hat keinen freigegebenen Ordner gemeldet.' };
     const path = pjoin(dir, name); await mcp.callTool('host:filesystem', 'write_file', { path, content: txt }, { cache: false });
-    info.textContent = 'IFC liegt im Übergabeordner: ' + path; $('ifc').disabled = false; return;
+    info.textContent = 'IFC liegt im Übergabeordner: ' + path + sum; $('ifc').disabled = false; return;
   } catch (e) { why = e && e.code ? fsMsg(e) : (e && e.message) || String(e); }
   try { const dl = await window.claude.use('downloads'); if (!dl) throw new Error('Download nicht verfügbar'); await dl.save({ filename: base + '_Gebaeudemodell_IFC.zip', data: zipOne(name, txt) });
     info.textContent = why + ' Die IFC wurde stattdessen als ZIP angeboten (' + base + '_Gebaeudemodell_IFC.zip). Vor dem Import in Raumtool 3D entpacken.'; }

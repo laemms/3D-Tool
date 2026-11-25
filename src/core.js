@@ -303,6 +303,19 @@
     let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36);
   }
 
-  const api = { syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
+  /* Geschosse übereinander stellen wie die Bestandsaufnahme (floorAlign): Geschosse mit gleichen Außenmaßen
+     (Toleranz 12 cm bzw. 1,5 %) werden mittig auf das Bezugsgeschoss (EG) geschoben; abweichende und „Lage frei“ bleiben.
+     Eingabe: [{ id, name, g, lageFrei }], Ergebnis: { id: { dx, dy, st } } in mm. */
+  function stapeln(fs) {
+    const env = new Map(fs.map(f => { const u = umriss(f.g || { knoten: [], waende: [] }); if (u.length < 3) return [f.id, null]; const xs = u.map(p => p[0]), ys = u.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys); return [f.id, { w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 }]; }));
+    const out = {}; fs.forEach(f => { out[f.id] = { dx: 0, dy: 0, st: env.get(f.id) ? '' : 'leer' }; });
+    const ref = fs.find(f => /^(eg|erd)/i.test(f.name || '') && env.get(f.id)) || fs.find(f => env.get(f.id)); if (!ref) return out;
+    const R = env.get(ref.id), tol = (a, b) => Math.abs(a - b) <= Math.max(120, 0.015 * Math.max(a, b)); out[ref.id].st = 'bezug';
+    for (const f of fs) { if (f === ref) continue; const e = env.get(f.id); if (!e) continue; if (f.lageFrei === 'ja') { out[f.id].st = 'frei'; continue; }
+      out[f.id] = tol(e.w, R.w) && tol(e.h, R.h) ? { dx: Math.round(R.cx - e.cx), dy: Math.round(R.cy - e.cy), st: 'gleich' } : { dx: 0, dy: 0, st: 'abw' }; }
+    return out;
+  }
+
+  const api = { stapeln, syncFromBA, geoKey, fixOpenings, hoehen, umriss, junctions, isHilf, MIN_RAUM, nodeCaps, hull, toSegs, rebuild, edit, roomsWithMeta, openingPoints, segProj, buildGraph, faces, innerContour, rooms, fromBestandsaufnahme, signedArea, centroid, inPoly, ptsOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GM = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

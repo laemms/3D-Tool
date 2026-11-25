@@ -41,6 +41,8 @@ Architekturplan (führend): Claude-Doc „BIM-Energieberater-Plattform – Archi
 - Abgleich beim Laden (`GM.syncFromBA`): Fenster und Türen kommen immer aus der Bestandsaufnahme (Kennung `quelle`),
   im Editor geänderte gelten als Ersatz (`ersetzt`), eigene als `eigen`. Raumdaten werden nachgeführt.
   Geänderte Räume (`GM.geoKey`) zeigen einen Hinweis „Wände neu übernehmen“; Wände werden nie stillschweigend ersetzt.
+- Geschosse übereinander (`GM.stapeln`, wie `floorAlign` der Bestandsaufnahme): gleiche Außenmaße (12 cm bzw. 1,5 %)
+  werden mittig auf das EG gestellt, abweichende und „Lage frei“ bleiben wie gezeichnet. Der Export meldet das Ergebnis.
 - Raumtrennung ohne Wand (offener Übergang) geht als 2-cm-Wand „Virtuelle Wand“ ins IFC: Raumtool 3D (K12) trennt
   Räume nur an Wänden, ignoriert `IfcVirtualElement` und Wände unter 2 cm (Test 25.11.2026). Kostet je Raum ~0,04 m².
 

@@ -73,7 +73,7 @@
     const SH = (body, axis) => E(`IFCPRODUCTDEFINITIONSHAPE($,$,(${(axis ? axis + ',' : '') + E(`IFCSHAPEREPRESENTATION(${ctx},'Body','SweptSolid',(${body}))`)}))`);
     const PS = (obj, name, props, key) => { const ps = props.filter(x => x[2] != null).map(x => E(`IFCPROPERTYSINGLEVALUE(${S(x[0])},$,${x[1]}(${x[2]}),$)`)); if (ps.length) E(`IFCRELDEFINESBYPROPERTIES(${G('rd|' + key)},${oh},$,$,(${obj}),${E(`IFCPROPERTYSET(${G('ps|' + key)},${oh},${S(name)},$,(${ps.join(',')}))`)})`); };
     const B = v => (v ? '.T.' : '.F.'), AG = (par, ch, key) => { if (ch.length) E(`IFCRELAGGREGATES(${G('ag|' + key)},${oh},$,$,${par},(${ch.join(',')}))`); };
-    const ccw = q => (GM.signedArea(q) < 0 ? q.slice().reverse() : q), W = c => [c[0] / 1000, -c[1] / 1000];
+    let OFF = [0, 0]; const ccw = q => (GM.signedArea(q) < 0 ? q.slice().reverse() : q), W = c => [(c[0] + OFF[0]) / 1000, -(c[1] + OFF[1]) / 1000];
 
     const proj = E(`IFCPROJECT(${G('projekt')},${oh},${S(model.projektName || pid)},$,$,$,$,(${ctx}),${un})`), lp0 = LP(null, 0, 0, 0);
     const site = E(`IFCSITE(${G('site')},${oh},${S('Grundstück')},$,$,${lp0},$,$,.ELEMENT.,$,$,$,$,$)`), lpB = LP(lp0, 0, 0, 0), bld = E(`IFCBUILDING(${G('building')},${oh},${S(model.projektName || pid)},$,$,${lpB},$,$,.ELEMENT.,$,$,$)`);
@@ -86,7 +86,10 @@
     fs.forEach((f, i) => { if (f.niveau_mm != null) elev[i] = f.niveau_mm; }); // Höhenmodell der Bestandsaufnahme (OKFF)
     const storeys = [], mat = {}, matOf = (t, sense, off) => { const k = t + '|' + sense + '|' + off; if (!mat[k]) mat[k] = E(`IFCMATERIALLAYERSETUSAGE(${E(`IFCMATERIALLAYERSET((${E(`IFCMATERIALLAYER(${E(`IFCMATERIAL(${S('Wand ' + CM(t) + ' cm')})`)},${M(t)},$)`)}),${S('Wand ' + CM(t) + ' cm')})`)},.AXIS2.,.${sense}.,${M(off)})`); return mat[k]; }, matRel = new Map();
     let raumNr = 0;
+    // Geschosse übereinander stellen (wie die Bestandsaufnahme beim IFC- und DXF-Export)
+    const stp = opts.stapeln === false ? {} : GM.stapeln(fs.map(f => ({ id: f.id, name: f.name, lageFrei: f.lageFrei, g: { knoten: f.knoten || [], waende: f.waende || [] } })));
     fs.forEach((f, fi) => {
+      OFF = stp[f.id] ? [stp[f.id].dx, stp[f.id].dy] : [0, 0];
       const g = { knoten: f.knoten || [], waende: f.waende || [], oeffnungen: f.oeffnungen || [] }, N = new Map(g.knoten.map(k => [k.id, k])), H = f.geschossHoehe_mm || 2800, lichte = f.lichteHoehe_mm || H - 300;
       const lpS = LP(lpB, 0, 0, elev[fi] / 1000), st = E(`IFCBUILDINGSTOREY(${G('st|' + f.id)},${oh},${S(f.name || 'Geschoss')},$,$,${lpS},$,$,.ELEMENT.,${M(elev[fi])})`); storeys.push(st);
       const els = [], sp = [], ends = wallEnds(g);
